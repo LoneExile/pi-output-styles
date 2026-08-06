@@ -206,7 +206,7 @@ describe("bundled styles", () => {
   });
 });
 
-import outputStyles, { projectStateFile } from "../extensions/output-styles.ts";
+import outputStyles, { projectStateFile, userStateFile } from "../extensions/output-styles.ts";
 
 interface Captured {
   commands: Record<string, (args: string, ctx: FakeCtx) => unknown>;
@@ -286,6 +286,10 @@ describe("extension wiring", () => {
     expect(result.systemPrompt[0]).toBe("BASE");
     expect(result.systemPrompt[1]).toContain("<!-- pi-output-styles:teacher -->");
     expect(cap.notes.some(n => n.type === "info")).toBe(true);
+    // Personal-by-default: a bare /style (no --save/--project flag) must not
+    // persist anything to disk — only sessionActive (in-memory) changes.
+    expect(readState(projectStateFile(cwd))).toEqual({});
+    expect(readState(userStateFile())).toEqual({});
   });
 
   test("/style teacher --project persists to the project state file", async () => {
@@ -294,5 +298,44 @@ describe("extension wiring", () => {
     const { cap, ctx } = harness(cwd);
     await cap.commands["style"]("teacher --project", ctx);
     expect(readState(projectStateFile(cwd))).toEqual({ active: "teacher" });
+  });
+
+  // sessionActive is "teacher" here (set by the session-scope test above),
+  // and each harness() call below builds a fresh `cap`, so these tests
+  // observe only their own captured statuses/notes.
+  test("session_start sets the status line", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "pos-wire-"));
+    process.env.PI_OUTPUT_STYLES_HOME = mkdtempSync(join(tmpdir(), "pos-home-"));
+    const { cap, ctx } = harness(cwd);
+    await cap.handlers["session_start"](undefined, ctx);
+    expect(cap.statuses).toContain("style: teacher");
+  });
+
+  test("hasUI:false suppresses status", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "pos-wire-"));
+    process.env.PI_OUTPUT_STYLES_HOME = mkdtempSync(join(tmpdir(), "pos-home-"));
+    const { cap, ctx } = harness(cwd);
+    const noUiCtx: FakeCtx = { ...ctx, hasUI: false };
+    await cap.handlers["before_agent_start"]({ prompt: "hi", systemPrompt: ["BASE"] }, noUiCtx);
+    expect(cap.statuses).toEqual([]);
+  });
+
+  test("/style <unknown> does not clobber the active style", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "pos-wire-"));
+    process.env.PI_OUTPUT_STYLES_HOME = mkdtempSync(join(tmpdir(), "pos-home-"));
+    const { cap, ctx } = harness(cwd);
+    await cap.commands["style"]("teacher", ctx);
+    const first = (await cap.handlers["before_agent_start"](
+      { prompt: "hi", systemPrompt: ["BASE"] },
+      ctx,
+    )) as { systemPrompt: string[] };
+    expect(first.systemPrompt[1]).toContain("<!-- pi-output-styles:teacher -->");
+
+    await cap.commands["style"]("nope-not-real", ctx);
+    const second = (await cap.handlers["before_agent_start"](
+      { prompt: "hi", systemPrompt: ["BASE"] },
+      ctx,
+    )) as { systemPrompt: string[] };
+    expect(second.systemPrompt[1]).toContain("<!-- pi-output-styles:teacher -->");
   });
 });
