@@ -205,3 +205,94 @@ describe("bundled styles", () => {
     }
   });
 });
+
+import outputStyles, { projectStateFile } from "../extensions/output-styles.ts";
+
+interface Captured {
+  commands: Record<string, (args: string, ctx: FakeCtx) => unknown>;
+  handlers: Record<string, (event: unknown, ctx: FakeCtx) => unknown>;
+  statuses: (string | undefined)[];
+  notes: { message: string; type?: string }[];
+}
+interface FakeCtx {
+  cwd: string;
+  hasUI: boolean;
+  ui: { setStatus: (k: string, t: string | undefined) => void; notify: (m: string, t?: string) => void };
+}
+
+function harness(cwd: string): { cap: Captured; ctx: FakeCtx } {
+  const cap: Captured = { commands: {}, handlers: {}, statuses: [], notes: [] };
+  const ctx: FakeCtx = {
+    cwd,
+    hasUI: true,
+    ui: {
+      setStatus: (_k, t) => cap.statuses.push(t),
+      notify: (m, t) => cap.notes.push({ message: m, type: t }),
+    },
+  };
+  const pi = {
+    setLabel: () => {},
+    on: (event: string, handler: (e: unknown, c: FakeCtx) => unknown) => {
+      cap.handlers[event] = handler;
+    },
+    registerCommand: (name: string, def: { handler: (a: string, c: FakeCtx) => unknown }) => {
+      cap.commands[name] = def.handler;
+    },
+  };
+  // Fake pi implements only the surface the extension uses; its handler/ctx
+  // types are intentionally narrower than the real ExtensionAPI, so bridge
+  // via `unknown` rather than `any` (Parameters<> avoids importing the
+  // module-local, unexported ExtensionAPI type by name).
+  outputStyles(pi as unknown as Parameters<typeof outputStyles>[0]);
+  return { cap, ctx };
+}
+
+describe("extension wiring", () => {
+  test("no active style → before_agent_start leaves the prompt unchanged", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "pos-wire-"));
+    process.env.PI_OUTPUT_STYLES_HOME = mkdtempSync(join(tmpdir(), "pos-home-"));
+    const { cap, ctx } = harness(cwd);
+    const result = await cap.handlers["before_agent_start"]({ prompt: "hi", systemPrompt: ["BASE"] }, ctx);
+    expect(result).toBeUndefined();
+  });
+
+  // NOTE: order deliberately deviates from the brief's literal listing.
+  // `sessionActive` is module-level and persists across tests in this file;
+  // "teacher" is a bundled style discoverable from any cwd, so running the
+  // teacher-session test before this one would leave sessionActive="teacher"
+  // and make this test's "no prompt change" expectation false. The brief's
+  // own note permits reordering as long as "no active style" stays first:
+  // "If you reorder tests, keep the 'no active' case first ...". This test
+  // runs while sessionActive is still unset by any prior /style call.
+  test("/style unknown → error notice and no prompt change", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "pos-wire-"));
+    process.env.PI_OUTPUT_STYLES_HOME = mkdtempSync(join(tmpdir(), "pos-home-"));
+    const { cap, ctx } = harness(cwd);
+    await cap.commands["style"]("nope-not-real", ctx);
+    expect(cap.notes.some(n => n.type === "error")).toBe(true);
+    const result = await cap.handlers["before_agent_start"]({ prompt: "hi", systemPrompt: ["BASE"] }, ctx);
+    expect(result).toBeUndefined();
+  });
+
+  test("/style teacher (session) → hook appends the teacher block", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "pos-wire-"));
+    process.env.PI_OUTPUT_STYLES_HOME = mkdtempSync(join(tmpdir(), "pos-home-"));
+    const { cap, ctx } = harness(cwd);
+    await cap.commands["style"]("teacher", ctx);
+    const result = (await cap.handlers["before_agent_start"](
+      { prompt: "hi", systemPrompt: ["BASE"] },
+      ctx,
+    )) as { systemPrompt: string[] };
+    expect(result.systemPrompt[0]).toBe("BASE");
+    expect(result.systemPrompt[1]).toContain("<!-- pi-output-styles:teacher -->");
+    expect(cap.notes.some(n => n.type === "info")).toBe(true);
+  });
+
+  test("/style teacher --project persists to the project state file", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "pos-wire-"));
+    process.env.PI_OUTPUT_STYLES_HOME = mkdtempSync(join(tmpdir(), "pos-home-"));
+    const { cap, ctx } = harness(cwd);
+    await cap.commands["style"]("teacher --project", ctx);
+    expect(readState(projectStateFile(cwd))).toEqual({ active: "teacher" });
+  });
+});

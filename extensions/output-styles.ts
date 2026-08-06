@@ -12,6 +12,40 @@ export interface Style {
   body: string;
 }
 
+type NotifyType = "info" | "warning" | "error";
+
+interface ExtensionUI {
+  setStatus(key: string, text: string | undefined): void;
+  notify(message: string, type?: NotifyType): void;
+}
+
+interface ExtensionContext {
+  cwd: string;
+  hasUI: boolean;
+  ui: ExtensionUI;
+}
+
+interface BeforeAgentStartEvent {
+  prompt: string;
+  systemPrompt?: string[];
+}
+
+interface BeforeAgentStartResult {
+  systemPrompt?: string[];
+}
+
+type EventHandler<E, R = void> = (event: E, ctx: ExtensionContext) => R | void | Promise<R | void>;
+
+interface ExtensionAPI {
+  setLabel(label: string): void;
+  on(event: "session_start", handler: EventHandler<unknown>): void;
+  on(event: "before_agent_start", handler: EventHandler<BeforeAgentStartEvent, BeforeAgentStartResult>): void;
+  registerCommand(
+    name: string,
+    def: { description: string; handler: (args: string, ctx: ExtensionContext) => void | Promise<void> },
+  ): void;
+}
+
 export function parseStyle(text: string, fallbackName: string): Style {
   let name = fallbackName;
   let description = "";
@@ -136,4 +170,70 @@ export function parseStyleCommandArgs(args: string): StyleCommandArgs {
   }
   const persist: PersistScope = project ? "project" : save ? "user" : "none";
   return { name, persist };
+}
+
+const STATUS_KEY = "pi-output-styles";
+
+let sessionActive: string | null = null;
+
+function styleDirs(cwd: string): string[] {
+  // low → high precedence: bundled < user < project
+  return [bundledStylesDir(), userStylesDir(), projectStylesDir(cwd)];
+}
+
+export function resolveActiveStyle(cwd: string): Style | null {
+  const name = resolveActiveName(
+    sessionActive,
+    readState(userStateFile()),
+    readState(projectStateFile(cwd)),
+  );
+  if (!name) return null;
+  return discoverStyles(styleDirs(cwd)).get(name) ?? null;
+}
+
+function refreshStatus(ctx: ExtensionContext, style: Style | null): void {
+  if (ctx.hasUI) ctx.ui.setStatus(STATUS_KEY, style ? `style: ${style.name}` : undefined);
+}
+
+export default function outputStyles(pi: ExtensionAPI): void {
+  pi.setLabel("output-styles");
+
+  pi.on("session_start", (_event, ctx) => {
+    refreshStatus(ctx, resolveActiveStyle(ctx.cwd));
+  });
+
+  pi.on("before_agent_start", (event, ctx) => {
+    const style = resolveActiveStyle(ctx.cwd);
+    refreshStatus(ctx, style);
+    if (!style) return;
+    return { systemPrompt: applyStyle(event.systemPrompt, style) };
+  });
+
+  pi.registerCommand("style", {
+    description: "Select an append-only output style. Usage: /style [name] [--save] [--project]",
+    handler: (args, ctx) => {
+      const { name, persist } = parseStyleCommandArgs(args);
+      const styles = discoverStyles(styleDirs(ctx.cwd));
+      const available = [...styles.keys()].sort().join(", ") || "(none)";
+
+      if (!name) {
+        const current = resolveActiveStyle(ctx.cwd);
+        ctx.ui.notify(`Active style: ${current?.name ?? "(none)"}\nAvailable: ${available}`, "info");
+        return;
+      }
+      if (!styles.has(name)) {
+        ctx.ui.notify(`Unknown style "${name}". Available: ${available}`, "error");
+        return;
+      }
+
+      sessionActive = name;
+      if (persist === "user") writeState(userStateFile(), { active: name });
+      else if (persist === "project") writeState(projectStateFile(ctx.cwd), { active: name });
+
+      const scope =
+        persist === "none" ? "this session" : persist === "user" ? "saved · user default" : "saved · project default";
+      refreshStatus(ctx, styles.get(name) ?? null);
+      ctx.ui.notify(`Output style → "${name}" (${scope}).`, "info");
+    },
+  });
 }
