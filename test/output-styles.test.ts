@@ -202,6 +202,8 @@ describe("bundled styles", () => {
     for (const name of ["concise", "explanatory", "teacher", "reviewer", "diagrams-first"]) {
       expect(m.has(name)).toBe(true);
       expect(m.get(name)!.body.length).toBeGreaterThan(0);
+      expect(m.get(name)!.description.length).toBeGreaterThan(0);
+      expect(m.get(name)!.body.startsWith("---")).toBe(false);
     }
   });
 });
@@ -298,6 +300,16 @@ describe("extension wiring", () => {
     const { cap, ctx } = harness(cwd);
     await cap.commands["style"]("teacher --project", ctx);
     expect(readState(projectStateFile(cwd))).toEqual({ active: "teacher" });
+    expect(readState(userStateFile())).toEqual({});
+  });
+
+  test("/style teacher --save persists to the user state file only", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "pos-wire-"));
+    process.env.PI_OUTPUT_STYLES_HOME = mkdtempSync(join(tmpdir(), "pos-home-"));
+    const { cap, ctx } = harness(cwd);
+    await cap.commands["style"]("teacher --save", ctx);
+    expect(readState(userStateFile())).toEqual({ active: "teacher" });
+    expect(readState(projectStateFile(cwd))).toEqual({});
   });
 
   // sessionActive is "teacher" here (set by the session-scope test above),
@@ -337,5 +349,22 @@ describe("extension wiring", () => {
       ctx,
     )) as { systemPrompt: string[] };
     expect(second.systemPrompt[1]).toContain("<!-- pi-output-styles:teacher -->");
+  });
+
+  test("/style teacher resolves the project-local definition over the bundled one", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "pos-wire-"));
+    process.env.PI_OUTPUT_STYLES_HOME = mkdtempSync(join(tmpdir(), "pos-home-"));
+    mkdirSync(join(cwd, ".omp", "output-styles"), { recursive: true });
+    writeFileSync(
+      join(cwd, ".omp", "output-styles", "teacher.md"),
+      "---\nname: teacher\ndescription: local\n---\nPROJECT-OVERRIDE-BODY",
+    );
+    const { cap, ctx } = harness(cwd);
+    await cap.commands["style"]("teacher", ctx);
+    const result = (await cap.handlers["before_agent_start"](
+      { prompt: "hi", systemPrompt: ["BASE"] },
+      ctx,
+    )) as { systemPrompt: string[] };
+    expect(result.systemPrompt[1]).toContain("PROJECT-OVERRIDE-BODY");
   });
 });
