@@ -1,5 +1,16 @@
 import { describe, test, expect } from "bun:test";
-import { parseStyle } from "../extensions/output-styles.ts";
+import outputStyles, {
+  parseStyle,
+  discoverStyles,
+  readState,
+  writeState,
+  resolveActiveName,
+  applyStyle,
+  parseStyleCommandArgs,
+  bundledStylesDir,
+  projectStateFile,
+  userStateFile,
+} from "../extensions/output-styles.ts";
 
 describe("parseStyle", () => {
   test("parses frontmatter name, description, and body", () => {
@@ -54,14 +65,12 @@ describe("parseStyle", () => {
   });
 });
 
-import { discoverStyles } from "../extensions/output-styles.ts";
 import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 function tmpStylesDir(files: Record<string, string>): string {
   const dir = mkdtempSync(join(tmpdir(), "pos-styles-"));
-  mkdirSync(dir, { recursive: true });
   for (const [name, content] of Object.entries(files)) writeFileSync(join(dir, name), content);
   return dir;
 }
@@ -90,9 +99,16 @@ describe("discoverStyles", () => {
     const m = discoverStyles(["/no/such/dir", dir]);
     expect(m.size).toBe(0);
   });
-});
 
-import { readState, writeState, resolveActiveName } from "../extensions/output-styles.ts";
+  test("same-tier same-name collision resolves deterministically to the alphabetically-last filename", () => {
+    const dir = tmpStylesDir({
+      "a.md": "---\nname: dup\n---\nBODY-A",
+      "z.md": "---\nname: dup\n---\nBODY-Z",
+    });
+    const m = discoverStyles([dir]);
+    expect(m.get("dup")!.body).toBe("BODY-Z");
+  });
+});
 
 describe("state", () => {
   test("writeState then readState round-trips active", () => {
@@ -122,8 +138,6 @@ describe("resolveActiveName", () => {
     expect(resolveActiveName(null, {}, {})).toBe(null);
   });
 });
-
-import { applyStyle } from "../extensions/output-styles.ts";
 
 describe("applyStyle", () => {
   const style = { name: "teacher", description: "", body: "Teach clearly." };
@@ -158,8 +172,6 @@ describe("applyStyle", () => {
   });
 });
 
-import { parseStyleCommandArgs } from "../extensions/output-styles.ts";
-
 describe("parseStyleCommandArgs", () => {
   test("bare name → session scope", () => {
     expect(parseStyleCommandArgs("teacher")).toEqual({ name: "teacher", persist: "none" });
@@ -189,7 +201,6 @@ describe("parseStyleCommandArgs", () => {
   });
 });
 
-import { bundledStylesDir } from "../extensions/output-styles.ts";
 import { existsSync } from "node:fs";
 
 describe("bundled styles", () => {
@@ -207,8 +218,6 @@ describe("bundled styles", () => {
     }
   });
 });
-
-import outputStyles, { projectStateFile, userStateFile } from "../extensions/output-styles.ts";
 
 interface Captured {
   commands: Record<string, (args: string, ctx: FakeCtx) => unknown>;
@@ -366,5 +375,46 @@ describe("extension wiring", () => {
       ctx,
     )) as { systemPrompt: string[] };
     expect(result.systemPrompt[1]).toContain("PROJECT-OVERRIDE-BODY");
+  });
+
+  test("before_agent_start never throws even if applyStyle would (malformed base)", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "pos-wire-"));
+    process.env.PI_OUTPUT_STYLES_HOME = mkdtempSync(join(tmpdir(), "pos-home-"));
+    const { cap, ctx } = harness(cwd);
+    await cap.commands["style"]("teacher", ctx);
+    const malformedEvent = { prompt: "hi", systemPrompt: ["ok", 42] };
+    const result = await cap.handlers["before_agent_start"](malformedEvent, ctx);
+    expect(result).toBeUndefined();
+  });
+
+  test("/style teacher --project notifies a warning and does not throw when saving fails", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "pos-wire-"));
+    process.env.PI_OUTPUT_STYLES_HOME = mkdtempSync(join(tmpdir(), "pos-home-"));
+    writeFileSync(join(cwd, ".omp"), "not a directory");
+    const { cap, ctx } = harness(cwd);
+    await cap.commands["style"]("teacher --project", ctx);
+    expect(cap.notes.some(n => n.type === "warning" && n.message.includes("saving failed"))).toBe(true);
+  });
+
+  test("/style teacher --saev warns about the unknown flag and still applies teacher", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "pos-wire-"));
+    process.env.PI_OUTPUT_STYLES_HOME = mkdtempSync(join(tmpdir(), "pos-home-"));
+    const { cap, ctx } = harness(cwd);
+    await cap.commands["style"]("teacher --saev", ctx);
+    expect(cap.notes.some(n => n.type === "warning" && n.message.includes("--saev"))).toBe(true);
+    const result = (await cap.handlers["before_agent_start"](
+      { prompt: "hi", systemPrompt: ["BASE"] },
+      ctx,
+    )) as { systemPrompt: string[] };
+    expect(result.systemPrompt[1]).toContain("<!-- pi-output-styles:teacher -->");
+  });
+
+  test("/style (no args) lists styles with their descriptions", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "pos-wire-"));
+    process.env.PI_OUTPUT_STYLES_HOME = mkdtempSync(join(tmpdir(), "pos-home-"));
+    const { cap, ctx } = harness(cwd);
+    await cap.commands["style"]("", ctx);
+    const info = cap.notes.find(n => n.type === "info");
+    expect(info?.message).toContain("Teach as you go; explain concepts before applying them");
   });
 });

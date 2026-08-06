@@ -14,5 +14,8 @@
     "noEmit": true,
     "verbatimModuleSyntax": true
   },
+  // test/ is intentionally NOT included here: typechecking it would require
+  // the bun-types devDependency, which the zero-extra-deps constraint
+  // forbids. Tests are instead validated at runtime via `bun test`.
   "include": ["extensions/**/*.ts"]
 }

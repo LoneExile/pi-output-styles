@@ -70,7 +70,7 @@ export function discoverStyles(dirsLowToHigh: string[]): Map<string, Style> {
   for (const dir of dirsLowToHigh) {
     let entries: string[];
     try {
-      entries = readdirSync(dir);
+      entries = readdirSync(dir).sort();
     } catch {
       continue;
     }
@@ -174,6 +174,11 @@ export function parseStyleCommandArgs(args: string): StyleCommandArgs {
 
 const STATUS_KEY = "pi-output-styles";
 
+// Session-active style selection is process-global (module-level) state.
+// This assumes one module instance per session/cwd, which holds under
+// today's per-session extension loading. If OMP ever shares one module
+// instance across multiple concurrent sessions, switch this to a
+// cwd-keyed Map instead of a single variable.
 let sessionActive: string | null = null;
 
 function styleDirs(cwd: string): string[] {
@@ -181,14 +186,15 @@ function styleDirs(cwd: string): string[] {
   return [bundledStylesDir(), userStylesDir(), projectStylesDir(cwd)];
 }
 
-export function resolveActiveStyle(cwd: string): Style | null {
+export function resolveActiveStyle(cwd: string, styles?: Map<string, Style>): Style | null {
   const name = resolveActiveName(
     sessionActive,
     readState(userStateFile()),
     readState(projectStateFile(cwd)),
   );
   if (!name) return null;
-  return discoverStyles(styleDirs(cwd)).get(name) ?? null;
+  const map = styles ?? discoverStyles(styleDirs(cwd));
+  return map.get(name) ?? null;
 }
 
 function refreshStatus(ctx: ExtensionContext, style: Style | null): void {
@@ -203,10 +209,14 @@ export default function outputStyles(pi: ExtensionAPI): void {
   });
 
   pi.on("before_agent_start", (event, ctx) => {
-    const style = resolveActiveStyle(ctx.cwd);
-    refreshStatus(ctx, style);
-    if (!style) return;
-    return { systemPrompt: applyStyle(event.systemPrompt, style) };
+    try {
+      const style = resolveActiveStyle(ctx.cwd);
+      refreshStatus(ctx, style);
+      if (!style) return;
+      return { systemPrompt: applyStyle(event.systemPrompt, style) };
+    } catch {
+      return; // never fail a turn over a styling concern
+    }
   });
 
   pi.registerCommand("style", {
@@ -216,9 +226,21 @@ export default function outputStyles(pi: ExtensionAPI): void {
       const styles = discoverStyles(styleDirs(ctx.cwd));
       const available = [...styles.keys()].sort().join(", ") || "(none)";
 
+      const unknownFlags = args
+        .trim()
+        .split(/\s+/)
+        .filter(t => t.startsWith("--") && t !== "--save" && t !== "--global" && t !== "--project");
+      if (unknownFlags.length > 0) {
+        ctx.ui.notify(`Ignored unknown flag(s): ${unknownFlags.join(", ")}`, "warning");
+      }
+
       if (!name) {
-        const current = resolveActiveStyle(ctx.cwd);
-        ctx.ui.notify(`Active style: ${current?.name ?? "(none)"}\nAvailable: ${available}`, "info");
+        const current = resolveActiveStyle(ctx.cwd, styles);
+        const listing = [...styles.values()]
+          .sort((a, b) => a.name.localeCompare(b.name))
+          .map(s => (s.description ? `${s.name} — ${s.description}` : s.name))
+          .join("\n");
+        ctx.ui.notify(`Active style: ${current?.name ?? "(none)"}\nAvailable:\n${listing || "(none)"}`, "info");
         return;
       }
       if (!styles.has(name)) {
@@ -227,11 +249,18 @@ export default function outputStyles(pi: ExtensionAPI): void {
       }
 
       sessionActive = name;
-      if (persist === "user") writeState(userStateFile(), { active: name });
-      else if (persist === "project") writeState(projectStateFile(ctx.cwd), { active: name });
-
-      const scope =
-        persist === "none" ? "this session" : persist === "user" ? "saved · user default" : "saved · project default";
+      let scope = "this session";
+      try {
+        if (persist === "user") {
+          writeState(userStateFile(), { active: name });
+          scope = "saved · user default";
+        } else if (persist === "project") {
+          writeState(projectStateFile(ctx.cwd), { active: name });
+          scope = "saved · project default";
+        }
+      } catch (err) {
+        ctx.ui.notify(`Applied for this session, but saving failed: ${String(err)}`, "warning");
+      }
       refreshStatus(ctx, styles.get(name) ?? null);
       ctx.ui.notify(`Output style → "${name}" (${scope}).`, "info");
     },

@@ -41,6 +41,8 @@ The body is appended to the prompt. Precedence — **definitions**: project > us
 ## Config
 
 - `PI_OUTPUT_STYLES_HOME` — override the user config base (default `~/.omp/agent`).
+- User default (written by `--save`): `~/.omp/agent/pi-output-styles.json` (base overridable via `PI_OUTPUT_STYLES_HOME`).
+- Project default (written by `--save --project`, git-tracked): `<repo>/.omp/pi-output-styles.json`.
 
 ## Develop
 
