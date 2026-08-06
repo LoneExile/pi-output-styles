@@ -158,6 +158,11 @@ export interface StyleCommandArgs {
   persist: PersistScope;
 }
 
+// Flags recognized by the /style command. parseStyleCommandArgs maps each to a
+// persist scope; the command handler warns on any --flag NOT in this set.
+// Keep this in sync with the flag handling in parseStyleCommandArgs.
+const KNOWN_FLAGS = ["--save", "--global", "--project"];
+
 export function parseStyleCommandArgs(args: string): StyleCommandArgs {
   const tokens = args.trim().split(/\s+/).filter(t => t.length > 0);
   let name: string | null = null;
@@ -211,9 +216,16 @@ export default function outputStyles(pi: ExtensionAPI): void {
   pi.on("before_agent_start", (event, ctx) => {
     try {
       const style = resolveActiveStyle(ctx.cwd);
+      if (!style) {
+        refreshStatus(ctx, null);
+        return;
+      }
+      // Apply first; only reflect the style in the status line once the
+      // prompt was actually augmented, so a swallowed throw never advertises
+      // a style the turn did not apply.
+      const result = { systemPrompt: applyStyle(event.systemPrompt, style) };
       refreshStatus(ctx, style);
-      if (!style) return;
-      return { systemPrompt: applyStyle(event.systemPrompt, style) };
+      return result;
     } catch {
       return; // never fail a turn over a styling concern
     }
@@ -229,7 +241,7 @@ export default function outputStyles(pi: ExtensionAPI): void {
       const unknownFlags = args
         .trim()
         .split(/\s+/)
-        .filter(t => t.startsWith("--") && t !== "--save" && t !== "--global" && t !== "--project");
+        .filter(t => t.startsWith("--") && !KNOWN_FLAGS.includes(t));
       if (unknownFlags.length > 0) {
         ctx.ui.notify(`Ignored unknown flag(s): ${unknownFlags.join(", ")}`, "warning");
       }

@@ -13,7 +13,7 @@ omp plugin install github:LoneExile/pi-output-styles
 - `/style` — show the active style and list available ones.
 - `/style <name>` — activate a style for this session.
 - `/style <name> --save` — also save it as your personal (user) default.
-- `/style <name> --save --project` — save it as the project default (committed with the repo).
+- `/style <name> --project` — save it as the project default (committed with the repo).
 
 The active style's text is **appended** to the system prompt every turn; it never replaces OMP's default behavior. The status line shows the active style.
 
@@ -42,7 +42,7 @@ The body is appended to the prompt. Precedence — **definitions**: project > us
 
 - `PI_OUTPUT_STYLES_HOME` — override the user config base (default `~/.omp/agent`).
 - User default (written by `--save`): `~/.omp/agent/pi-output-styles.json` (base overridable via `PI_OUTPUT_STYLES_HOME`).
-- Project default (written by `--save --project`, git-tracked): `<repo>/.omp/pi-output-styles.json`.
+- Project default (written by `--project`, git-tracked): `<repo>/.omp/pi-output-styles.json`.
 
 ## Develop
 
