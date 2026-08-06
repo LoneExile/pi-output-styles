@@ -145,4 +145,15 @@ describe("applyStyle", () => {
     const twice = applyStyle(once, style);
     expect(twice).toEqual(once);
   });
+
+  test("does not append a second block when switching styles mid-prompt", () => {
+    const other = { name: "concise", description: "", body: "Be brief." };
+    const once = applyStyle(["BASE"], style);
+    expect(applyStyle(once, other)).toEqual(once);
+  });
+
+  test("coerces a non-array base to empty", () => {
+    // @ts-expect-error — exercising the runtime Array.isArray guard against a non-array
+    expect(applyStyle(null, style)).toEqual(["<!-- pi-output-styles:teacher -->\nTeach clearly."]);
+  });
 });
