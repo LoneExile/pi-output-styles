@@ -4,6 +4,7 @@
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 export interface Style {
   name: string;
@@ -65,6 +66,10 @@ export function userStylesDir(): string {
 
 export function projectStylesDir(cwd: string): string {
   return join(cwd, ".omp", "output-styles");
+}
+
+export function bundledStylesDir(): string {
+  return join(dirname(fileURLToPath(import.meta.url)), "styles");
 }
 
 export interface StyleState {

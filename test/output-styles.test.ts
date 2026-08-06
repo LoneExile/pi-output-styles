@@ -188,3 +188,20 @@ describe("parseStyleCommandArgs", () => {
     expect(parseStyleCommandArgs("--save")).toEqual({ name: null, persist: "user" });
   });
 });
+
+import { bundledStylesDir } from "../extensions/output-styles.ts";
+import { existsSync } from "node:fs";
+
+describe("bundled styles", () => {
+  test("bundledStylesDir resolves to the shipped styles directory", () => {
+    expect(existsSync(bundledStylesDir())).toBe(true);
+  });
+
+  test("all five starter styles discover with non-empty bodies", () => {
+    const m = discoverStyles([bundledStylesDir()]);
+    for (const name of ["concise", "explanatory", "teacher", "reviewer", "diagrams-first"]) {
+      expect(m.has(name)).toBe(true);
+      expect(m.get(name)!.body.length).toBeGreaterThan(0);
+    }
+  });
+});
