@@ -28,4 +28,28 @@ describe("parseStyle", () => {
     const s = parseStyle('---\nname: "quoted"\n---\nx', "fb");
     expect(s.name).toBe("quoted");
   });
+
+  test("falls back to fallbackName when name value is empty", () => {
+    const s = parseStyle("---\nname:\n---\nB", "fb");
+    expect(s.name).toBe("fb");
+  });
+
+  test("preserves an unmatched trailing apostrophe instead of stripping it", () => {
+    const s = parseStyle("---\ndescription: the devs'\n---\nB", "fb");
+    expect(s.description).toBe("the devs'");
+  });
+
+  test("does not treat a line merely starting with --- as the closing fence", () => {
+    const s = parseStyle("---\nname: x\n--- junk\nB", "fb");
+    expect(s.name).toBe("fb");
+    expect(s.body).toContain("name: x");
+  });
+
+  test("parses CRLF frontmatter and preserves CRLF body line endings", () => {
+    const text = "---\r\nname: teacher\r\ndescription: why\r\n---\r\nBody one\r\nBody two";
+    const s = parseStyle(text, "fb");
+    expect(s.name).toBe("teacher");
+    expect(s.description).toBe("why");
+    expect(s.body).toBe("Body one\r\nBody two");
+  });
 });
