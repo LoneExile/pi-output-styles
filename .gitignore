@@ -1,0 +1,7 @@
+# Local design/spec docs — intentionally kept OUT of version control
+docs/superpowers/
+
+# Node
+node_modules/
+dist/
+*.log
