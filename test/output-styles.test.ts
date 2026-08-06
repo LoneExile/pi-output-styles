@@ -91,3 +91,34 @@ describe("discoverStyles", () => {
     expect(m.size).toBe(0);
   });
 });
+
+import { readState, writeState, resolveActiveName } from "../extensions/output-styles.ts";
+
+describe("state", () => {
+  test("writeState then readState round-trips active", () => {
+    const dir = mkdtempSync(join(tmpdir(), "pos-state-"));
+    const file = join(dir, "nested", "state.json");
+    writeState(file, { active: "teacher" });
+    expect(readState(file)).toEqual({ active: "teacher" });
+  });
+
+  test("readState returns {} for missing or malformed files", () => {
+    expect(readState("/no/such/file.json")).toEqual({});
+    const dir = mkdtempSync(join(tmpdir(), "pos-state-"));
+    const bad = join(dir, "bad.json");
+    writeFileSync(bad, "{ not json");
+    expect(readState(bad)).toEqual({});
+    const noActive = join(dir, "noactive.json");
+    writeFileSync(noActive, JSON.stringify({ other: 1 }));
+    expect(readState(noActive)).toEqual({});
+  });
+});
+
+describe("resolveActiveName", () => {
+  test("session beats user beats project", () => {
+    expect(resolveActiveName("s", { active: "u" }, { active: "p" })).toBe("s");
+    expect(resolveActiveName(null, { active: "u" }, { active: "p" })).toBe("u");
+    expect(resolveActiveName(null, {}, { active: "p" })).toBe("p");
+    expect(resolveActiveName(null, {}, {})).toBe(null);
+  });
+});

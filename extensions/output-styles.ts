@@ -1,9 +1,9 @@
 // pi-output-styles — named, append-only system-prompt styles for OMP/Pi.
 // Pure helpers are exported for unit testing.
 
-import { readdirSync, readFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 export interface Style {
   name: string;
@@ -65,4 +65,41 @@ export function userStylesDir(): string {
 
 export function projectStylesDir(cwd: string): string {
   return join(cwd, ".omp", "output-styles");
+}
+
+export interface StyleState {
+  active?: string;
+}
+
+export function readState(file: string): StyleState {
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(file, "utf8"));
+    if (parsed && typeof parsed === "object" && "active" in parsed && typeof parsed.active === "string") {
+      return { active: parsed.active };
+    }
+  } catch {
+    // missing or malformed → empty
+  }
+  return {};
+}
+
+export function writeState(file: string, state: StyleState): void {
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, JSON.stringify(state, null, 2) + "\n");
+}
+
+export function userStateFile(): string {
+  return join(configHome(), "pi-output-styles.json");
+}
+
+export function projectStateFile(cwd: string): string {
+  return join(cwd, ".omp", "pi-output-styles.json");
+}
+
+export function resolveActiveName(
+  sessionActive: string | null,
+  userState: StyleState,
+  projectState: StyleState,
+): string | null {
+  return sessionActive ?? userState.active ?? projectState.active ?? null;
 }
