@@ -178,4 +178,13 @@ describe("parseStyleCommandArgs", () => {
     expect(parseStyleCommandArgs("--save teacher")).toEqual({ name: "teacher", persist: "user" });
     expect(parseStyleCommandArgs("   ")).toEqual({ name: null, persist: "none" });
   });
+  test("flag order is irrelevant to precedence: --project before --save still yields project scope", () => {
+    expect(parseStyleCommandArgs("teacher --project --save")).toEqual({ name: "teacher", persist: "project" });
+  });
+  test("only the first non-flag token is treated as the name", () => {
+    expect(parseStyleCommandArgs("teacher concise")).toEqual({ name: "teacher", persist: "none" });
+  });
+  test("flag-only input yields a null name with the flag's persist scope", () => {
+    expect(parseStyleCommandArgs("--save")).toEqual({ name: null, persist: "user" });
+  });
 });
