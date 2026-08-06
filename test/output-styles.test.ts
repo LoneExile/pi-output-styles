@@ -53,3 +53,41 @@ describe("parseStyle", () => {
     expect(s.body).toBe("Body one\r\nBody two");
   });
 });
+
+import { discoverStyles } from "../extensions/output-styles.ts";
+import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+function tmpStylesDir(files: Record<string, string>): string {
+  const dir = mkdtempSync(join(tmpdir(), "pos-styles-"));
+  mkdirSync(dir, { recursive: true });
+  for (const [name, content] of Object.entries(files)) writeFileSync(join(dir, name), content);
+  return dir;
+}
+
+describe("discoverStyles", () => {
+  test("reads .md styles from a directory keyed by name", () => {
+    const dir = tmpStylesDir({
+      "teacher.md": "---\nname: teacher\n---\nteach body",
+      "notes.txt": "ignored",
+    });
+    const m = discoverStyles([dir]);
+    expect(m.has("teacher")).toBe(true);
+    expect(m.get("teacher")!.body).toBe("teach body");
+    expect(m.size).toBe(1); // .txt ignored
+  });
+
+  test("higher-precedence dir overrides same-named style", () => {
+    const low = tmpStylesDir({ "x.md": "---\nname: x\n---\nlow" });
+    const high = tmpStylesDir({ "x.md": "---\nname: x\n---\nhigh" });
+    const m = discoverStyles([low, high]);
+    expect(m.get("x")!.body).toBe("high");
+  });
+
+  test("skips missing dirs and empty-body files", () => {
+    const dir = tmpStylesDir({ "empty.md": "---\nname: empty\n---\n   " });
+    const m = discoverStyles(["/no/such/dir", dir]);
+    expect(m.size).toBe(0);
+  });
+});
