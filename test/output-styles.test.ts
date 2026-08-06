@@ -157,3 +157,25 @@ describe("applyStyle", () => {
     expect(applyStyle(null, style)).toEqual(["<!-- pi-output-styles:teacher -->\nTeach clearly."]);
   });
 });
+
+import { parseStyleCommandArgs } from "../extensions/output-styles.ts";
+
+describe("parseStyleCommandArgs", () => {
+  test("bare name → session scope", () => {
+    expect(parseStyleCommandArgs("teacher")).toEqual({ name: "teacher", persist: "none" });
+  });
+  test("--save → user scope", () => {
+    expect(parseStyleCommandArgs("teacher --save")).toEqual({ name: "teacher", persist: "user" });
+  });
+  test("--global is an alias for user scope", () => {
+    expect(parseStyleCommandArgs("teacher --global")).toEqual({ name: "teacher", persist: "user" });
+  });
+  test("--project (with or without --save) → project scope", () => {
+    expect(parseStyleCommandArgs("teacher --save --project")).toEqual({ name: "teacher", persist: "project" });
+    expect(parseStyleCommandArgs("teacher --project")).toEqual({ name: "teacher", persist: "project" });
+  });
+  test("flag order does not matter and empty input yields null name", () => {
+    expect(parseStyleCommandArgs("--save teacher")).toEqual({ name: "teacher", persist: "user" });
+    expect(parseStyleCommandArgs("   ")).toEqual({ name: null, persist: "none" });
+  });
+});

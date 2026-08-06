@@ -111,3 +111,24 @@ export function applyStyle(baseBlocks: string[] | undefined, style: Style): stri
   if (base.some(b => b.includes(MARKER_PREFIX))) return base;
   return [...base, `${MARKER_PREFIX}${style.name} -->\n${style.body}`];
 }
+
+export type PersistScope = "none" | "user" | "project";
+
+export interface StyleCommandArgs {
+  name: string | null;
+  persist: PersistScope;
+}
+
+export function parseStyleCommandArgs(args: string): StyleCommandArgs {
+  const tokens = args.trim().split(/\s+/).filter(t => t.length > 0);
+  let name: string | null = null;
+  let save = false;
+  let project = false;
+  for (const t of tokens) {
+    if (t === "--save" || t === "--global") save = true;
+    else if (t === "--project") project = true;
+    else if (!t.startsWith("--") && name === null) name = t;
+  }
+  const persist: PersistScope = project ? "project" : save ? "user" : "none";
+  return { name, persist };
+}
