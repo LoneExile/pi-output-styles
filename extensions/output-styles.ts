@@ -103,3 +103,11 @@ export function resolveActiveName(
 ): string | null {
   return sessionActive ?? userState.active ?? projectState.active ?? null;
 }
+
+const MARKER_PREFIX = "<!-- pi-output-styles:";
+
+export function applyStyle(baseBlocks: string[] | undefined, style: Style): string[] {
+  const base = Array.isArray(baseBlocks) ? baseBlocks : [];
+  if (base.some(b => b.includes(MARKER_PREFIX))) return base;
+  return [...base, `${MARKER_PREFIX}${style.name} -->\n${style.body}`];
+}

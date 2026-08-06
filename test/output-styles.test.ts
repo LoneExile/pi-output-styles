@@ -122,3 +122,27 @@ describe("resolveActiveName", () => {
     expect(resolveActiveName(null, {}, {})).toBe(null);
   });
 });
+
+import { applyStyle } from "../extensions/output-styles.ts";
+
+describe("applyStyle", () => {
+  const style = { name: "teacher", description: "", body: "Teach clearly." };
+
+  test("appends exactly one marked block preserving base order", () => {
+    const out = applyStyle(["A", "B"], style);
+    expect(out.length).toBe(3);
+    expect(out.slice(0, 2)).toEqual(["A", "B"]);
+    expect(out[2]).toBe("<!-- pi-output-styles:teacher -->\nTeach clearly.");
+  });
+
+  test("coerces undefined base to empty array", () => {
+    const out = applyStyle(undefined, style);
+    expect(out).toEqual(["<!-- pi-output-styles:teacher -->\nTeach clearly."]);
+  });
+
+  test("is idempotent when a marker block is already present", () => {
+    const once = applyStyle(["BASE"], style);
+    const twice = applyStyle(once, style);
+    expect(twice).toEqual(once);
+  });
+});
