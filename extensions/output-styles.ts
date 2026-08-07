@@ -174,6 +174,9 @@ export interface StyleCommandArgs {
 // Keep this in sync with the flag handling in parseStyleCommandArgs.
 const KNOWN_FLAGS = ["--save", "--global", "--project"];
 
+// Reserved argument words that clear the active style instead of selecting one.
+const OFF_WORDS: Record<string, true> = { off: true, none: true };
+
 export function parseStyleCommandArgs(args: string): StyleCommandArgs {
   const tokens = args.trim().split(/\s+/).filter(t => t.length > 0);
   let name: string | null = null;
@@ -195,7 +198,8 @@ const STATUS_KEY = "pi-output-styles";
 // today's per-session extension loading. If OMP ever shares one module
 // instance across multiple concurrent sessions, switch this to a
 // cwd-keyed Map instead of a single variable.
-let sessionActive: string | null = null;
+type SessionSelection = { type: "inherit" } | { type: "off" } | { type: "style"; name: string };
+let session: SessionSelection = { type: "inherit" };
 
 function styleDirs(cwd: string): string[] {
   // low → high precedence: bundled < user < project
@@ -208,14 +212,17 @@ function styleDirs(cwd: string): string[] {
 export function styleCompletions(argumentPrefix: string, cwd: string): AutocompleteItem[] | null {
   if (argumentPrefix.includes(" ")) return null;
   const prefix = argumentPrefix.trim().toLowerCase();
-  const items: AutocompleteItem[] = [...discoverStyles(styleDirs(cwd)).values()]
+  const styleItems: AutocompleteItem[] = [...discoverStyles(styleDirs(cwd)).values()]
     .sort((a, b) => a.name.localeCompare(b.name))
-    .filter(s => s.name.toLowerCase().startsWith(prefix))
     .map(s => ({ value: s.name, label: s.name, description: s.description || undefined }));
+  const offItem: AutocompleteItem = { value: "off", label: "off", description: "Turn off styling for this session" };
+  const items = [...styleItems, offItem].filter(i => i.value.toLowerCase().startsWith(prefix));
   return items.length > 0 ? items : null;
 }
 
 export function resolveActiveStyle(cwd: string, styles?: Map<string, Style>): Style | null {
+  if (session.type === "off") return null;
+  const sessionActive = session.type === "style" ? session.name : null;
   const name = resolveActiveName(
     sessionActive,
     readState(userStateFile()),
@@ -256,7 +263,7 @@ export default function outputStyles(pi: ExtensionAPI): void {
   });
 
   pi.registerCommand("style", {
-    description: "Select an append-only output style. Usage: /style [name] [--save] [--project]",
+    description: "Select an append-only output style, or clear it. Usage: /style [name|off] [--save] [--project]",
     getArgumentCompletions: argumentPrefix => styleCompletions(argumentPrefix, process.cwd()),
     handler: (args, ctx) => {
       const { name, persist } = parseStyleCommandArgs(args);
@@ -280,12 +287,30 @@ export default function outputStyles(pi: ExtensionAPI): void {
         ctx.ui.notify(`Active style: ${current?.name ?? "(none)"}\nAvailable:\n${listing || "(none)"}`, "info");
         return;
       }
+      if (OFF_WORDS[name.toLowerCase()]) {
+        session = { type: "off" };
+        let offScope = "this session";
+        try {
+          if (persist === "user") {
+            writeState(userStateFile(), {});
+            offScope = "cleared · user default";
+          } else if (persist === "project") {
+            writeState(projectStateFile(ctx.cwd), {});
+            offScope = "cleared · project default";
+          }
+        } catch (err) {
+          ctx.ui.notify(`Cleared for this session, but updating the saved default failed: ${String(err)}`, "warning");
+        }
+        refreshStatus(ctx, null);
+        ctx.ui.notify(`Output style off (${offScope}).`, "info");
+        return;
+      }
       if (!styles.has(name)) {
         ctx.ui.notify(`Unknown style "${name}". Available: ${available}`, "error");
         return;
       }
 
-      sessionActive = name;
+      session = { type: "style", name };
       let scope = "this session";
       try {
         if (persist === "user") {

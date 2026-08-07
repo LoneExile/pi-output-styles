@@ -11,6 +11,7 @@ import outputStyles, {
   projectStateFile,
   userStateFile,
   styleCompletions,
+  resolveActiveStyle,
 } from "../extensions/output-styles.ts";
 
 describe("parseStyle", () => {
@@ -418,6 +419,36 @@ describe("extension wiring", () => {
     const info = cap.notes.find(n => n.type === "info");
     expect(info?.message).toContain("Teach as you go; explain concepts before applying them");
   });
+
+  test("/style off overrides a saved default and clears the session", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "pos-wire-"));
+    process.env.PI_OUTPUT_STYLES_HOME = mkdtempSync(join(tmpdir(), "pos-home-"));
+    const { cap, ctx } = harness(cwd);
+    writeState(userStateFile(), { active: "teacher" }); // a saved default exists
+    await cap.commands["style"]("teacher", ctx);
+    expect(resolveActiveStyle(cwd)?.name).toBe("teacher");
+    await cap.commands["style"]("off", ctx);
+    expect(resolveActiveStyle(cwd)).toBeNull();
+    expect(cap.notes.some(n => n.type === "info" && n.message.toLowerCase().includes("off"))).toBe(true);
+  });
+
+  test("/style none is an alias for off", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "pos-wire-"));
+    process.env.PI_OUTPUT_STYLES_HOME = mkdtempSync(join(tmpdir(), "pos-home-"));
+    const { cap, ctx } = harness(cwd);
+    writeState(userStateFile(), { active: "teacher" });
+    await cap.commands["style"]("none", ctx);
+    expect(resolveActiveStyle(cwd)).toBeNull();
+  });
+
+  test("/style off --save clears the saved user default", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "pos-wire-"));
+    process.env.PI_OUTPUT_STYLES_HOME = mkdtempSync(join(tmpdir(), "pos-home-"));
+    const { cap, ctx } = harness(cwd);
+    writeState(userStateFile(), { active: "teacher" });
+    await cap.commands["style"]("off --save", ctx);
+    expect(readState(userStateFile())).toEqual({});
+  });
 });
 
 describe("styleCompletions", () => {
@@ -442,6 +473,7 @@ describe("styleCompletions", () => {
       "explanatory",
       "reviewer",
       "teacher",
+      "off",
     ]);
   });
 
@@ -451,6 +483,10 @@ describe("styleCompletions", () => {
 
   test("returns null when nothing matches", () => {
     expect(styleCompletions("zzz", freshCwd())).toBe(null);
+  });
+
+  test("offers 'off' to clear the active style", () => {
+    expect(styleCompletions("of", freshCwd())!.map(i => i.value)).toEqual(["off"]);
   });
 
   test("offers a project style and can shadow a bundled name", () => {
