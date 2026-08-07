@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        run: bun x tsc --noEmit
+
+      - name: Test
+        run: bun test
+
+      - name: Verify package contents
+        run: |
+          set -euo pipefail
+          npm pack --silent
+          tar tzf pi-output-styles-*.tgz | tee /tmp/files.txt
+          grep -qx 'package/extensions/output-styles.ts' /tmp/files.txt
+          grep -qx 'package/extensions/styles/teacher.md' /tmp/files.txt
+          grep -qx 'package/extensions/styles/concise.md' /tmp/files.txt
+          grep -qx 'package/package.json' /tmp/files.txt
+          grep -qx 'package/README.md' /tmp/files.txt
+          grep -qx 'package/CHANGELOG.md' /tmp/files.txt
+          grep -qx 'package/LICENSE' /tmp/files.txt
+          rm -f pi-output-styles-*.tgz

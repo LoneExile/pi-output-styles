@@ -1,10 +1,17 @@
 # pi-output-styles
 
+[![npm version](https://img.shields.io/npm/v/pi-output-styles.svg)](https://www.npmjs.com/package/pi-output-styles)
+[![npm downloads](https://img.shields.io/npm/dm/pi-output-styles.svg)](https://www.npmjs.com/package/pi-output-styles)
+[![CI](https://github.com/LoneExile/pi-output-styles/actions/workflows/ci.yml/badge.svg)](https://github.com/LoneExile/pi-output-styles/actions/workflows/ci.yml)
+[![license](https://img.shields.io/npm/l/pi-output-styles.svg)](./LICENSE)
+
 Named, swappable, **append-only** system-prompt styles for [Oh My Pi (OMP)](https://pi.dev) and Pi — with a live `/style` switcher. Unlike Claude Code's output styles (which need `/clear` to switch), styles here apply and switch **live, mid-session**.
 
 ## Install
 
 ```bash
+omp plugin install npm:pi-output-styles
+# or from source:
 omp plugin install github:LoneExile/pi-output-styles
 ```
 

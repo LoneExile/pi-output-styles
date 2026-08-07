@@ -1,11 +1,14 @@
 {
   "name": "pi-output-styles",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Named, swappable, append-only system-prompt styles for Oh My Pi (OMP) and Pi — with a live /style switcher.",
   "keywords": ["pi-package", "pi", "omp", "oh-my-pi", "extension", "output-styles", "system-prompt", "persona"],
   "license": "MIT",
   "author": "LoneExile",
   "type": "module",
+  "homepage": "https://github.com/LoneExile/pi-output-styles#readme",
+  "repository": { "type": "git", "url": "git+https://github.com/LoneExile/pi-output-styles.git" },
+  "bugs": { "url": "https://github.com/LoneExile/pi-output-styles/issues" },
   "pi": { "extensions": ["./extensions"] },
   "omp": {
     "name": "pi-output-styles",
