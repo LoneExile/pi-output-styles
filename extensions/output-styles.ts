@@ -34,6 +34,13 @@ interface BeforeAgentStartResult {
   systemPrompt?: string[];
 }
 
+interface AutocompleteItem {
+  value: string;
+  label: string;
+  description?: string;
+  hint?: string;
+}
+
 type EventHandler<E, R = void> = (event: E, ctx: ExtensionContext) => R | void | Promise<R | void>;
 
 interface ExtensionAPI {
@@ -42,7 +49,11 @@ interface ExtensionAPI {
   on(event: "before_agent_start", handler: EventHandler<BeforeAgentStartEvent, BeforeAgentStartResult>): void;
   registerCommand(
     name: string,
-    def: { description: string; handler: (args: string, ctx: ExtensionContext) => void | Promise<void> },
+    def: {
+      description: string;
+      getArgumentCompletions?: (argumentPrefix: string) => AutocompleteItem[] | null;
+      handler: (args: string, ctx: ExtensionContext) => void | Promise<void>;
+    },
   ): void;
 }
 
@@ -191,6 +202,19 @@ function styleDirs(cwd: string): string[] {
   return [bundledStylesDir(), userStylesDir(), projectStylesDir(cwd)];
 }
 
+// Argument completions for `/style <name>`: matches style names by prefix.
+// getArgumentCompletions carries no ctx, so discovery uses process.cwd() as the
+// project scope (best-effort; the command handler still uses ctx.cwd).
+export function styleCompletions(argumentPrefix: string, cwd: string): AutocompleteItem[] | null {
+  if (argumentPrefix.includes(" ")) return null;
+  const prefix = argumentPrefix.trim().toLowerCase();
+  const items: AutocompleteItem[] = [...discoverStyles(styleDirs(cwd)).values()]
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .filter(s => s.name.toLowerCase().startsWith(prefix))
+    .map(s => ({ value: s.name, label: s.name, description: s.description || undefined }));
+  return items.length > 0 ? items : null;
+}
+
 export function resolveActiveStyle(cwd: string, styles?: Map<string, Style>): Style | null {
   const name = resolveActiveName(
     sessionActive,
@@ -233,6 +257,7 @@ export default function outputStyles(pi: ExtensionAPI): void {
 
   pi.registerCommand("style", {
     description: "Select an append-only output style. Usage: /style [name] [--save] [--project]",
+    getArgumentCompletions: argumentPrefix => styleCompletions(argumentPrefix, process.cwd()),
     handler: (args, ctx) => {
       const { name, persist } = parseStyleCommandArgs(args);
       const styles = discoverStyles(styleDirs(ctx.cwd));

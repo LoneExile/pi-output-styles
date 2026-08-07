@@ -10,6 +10,7 @@ import outputStyles, {
   bundledStylesDir,
   projectStateFile,
   userStateFile,
+  styleCompletions,
 } from "../extensions/output-styles.ts";
 
 describe("parseStyle", () => {
@@ -416,5 +417,46 @@ describe("extension wiring", () => {
     await cap.commands["style"]("", ctx);
     const info = cap.notes.find(n => n.type === "info");
     expect(info?.message).toContain("Teach as you go; explain concepts before applying them");
+  });
+});
+
+describe("styleCompletions", () => {
+  const freshCwd = () => {
+    const cwd = mkdtempSync(join(tmpdir(), "pos-comp-"));
+    process.env.PI_OUTPUT_STYLES_HOME = mkdtempSync(join(tmpdir(), "pos-home-"));
+    return cwd;
+  };
+
+  test("completes bundled style names filtered by prefix, with descriptions", () => {
+    const items = styleCompletions("te", freshCwd())!;
+    expect(items.map(i => i.value)).toEqual(["teacher"]);
+    expect(items[0].label).toBe("teacher");
+    expect(items[0].description!.length).toBeGreaterThan(0);
+  });
+
+  test("empty prefix returns all bundled styles, sorted", () => {
+    const items = styleCompletions("", freshCwd())!;
+    expect(items.map(i => i.value)).toEqual([
+      "concise",
+      "diagrams-first",
+      "explanatory",
+      "reviewer",
+      "teacher",
+    ]);
+  });
+
+  test("returns null once a space is present (name already typed)", () => {
+    expect(styleCompletions("teacher ", freshCwd())).toBe(null);
+  });
+
+  test("returns null when nothing matches", () => {
+    expect(styleCompletions("zzz", freshCwd())).toBe(null);
+  });
+
+  test("offers a project style and can shadow a bundled name", () => {
+    const cwd = freshCwd();
+    mkdirSync(join(cwd, ".omp", "output-styles"), { recursive: true });
+    writeFileSync(join(cwd, ".omp", "output-styles", "custom.md"), "---\nname: custom\ndescription: mine\n---\nX");
+    expect(styleCompletions("cu", cwd)!.map(i => i.value)).toEqual(["custom"]);
   });
 });
