@@ -9,11 +9,17 @@
   "homepage": "https://github.com/LoneExile/pi-output-styles#readme",
   "repository": { "type": "git", "url": "git+https://github.com/LoneExile/pi-output-styles.git" },
   "bugs": { "url": "https://github.com/LoneExile/pi-output-styles/issues" },
-  "pi": { "extensions": ["./extensions"] },
+  "pi": {
+    "extensions": ["./extensions"],
+    "image": "https://github.com/LoneExile/pi-output-styles/raw/main/assets/demo.gif",
+    "video": "https://github.com/LoneExile/pi-output-styles/raw/main/assets/demo.mp4"
+  },
   "omp": {
     "name": "pi-output-styles",
     "description": "Named, swappable, append-only system-prompt styles with a live /style switcher.",
-    "extensions": ["./extensions"]
+    "extensions": ["./extensions"],
+    "image": "https://github.com/LoneExile/pi-output-styles/raw/main/assets/demo.gif",
+    "video": "https://github.com/LoneExile/pi-output-styles/raw/main/assets/demo.mp4"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

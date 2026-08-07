@@ -7,6 +7,8 @@
 
 Named, swappable, **append-only** system-prompt styles for [Oh My Pi (OMP)](https://pi.dev) and Pi — with a live `/style` switcher. Unlike Claude Code's output styles (which need `/clear` to switch), styles here apply and switch **live, mid-session**.
 
+![/style demo](https://github.com/LoneExile/pi-output-styles/raw/main/assets/demo.gif)
+
 ## Install
 
 ```bash
