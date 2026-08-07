@@ -210,9 +210,9 @@ describe("bundled styles", () => {
     expect(existsSync(bundledStylesDir())).toBe(true);
   });
 
-  test("all five starter styles discover with non-empty bodies", () => {
+  test("all seven starter styles discover with non-empty bodies", () => {
     const m = discoverStyles([bundledStylesDir()]);
-    for (const name of ["concise", "explanatory", "teacher", "reviewer", "diagrams-first"]) {
+    for (const name of ["concise", "explanatory", "teacher", "reviewer", "diagrams-first", "ste", "eli5"]) {
       expect(m.has(name)).toBe(true);
       expect(m.get(name)!.body.length).toBeGreaterThan(0);
       expect(m.get(name)!.description.length).toBeGreaterThan(0);
@@ -470,8 +470,10 @@ describe("styleCompletions", () => {
     expect(items.map(i => i.value)).toEqual([
       "concise",
       "diagrams-first",
+      "eli5",
       "explanatory",
       "reviewer",
+      "ste",
       "teacher",
       "off",
     ]);

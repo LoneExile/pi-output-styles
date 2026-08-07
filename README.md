@@ -29,7 +29,11 @@ The active style's text is **appended** to the system prompt every turn; it neve
 
 ## Bundled styles
 
-`concise` · `explanatory` · `teacher` · `reviewer` · `diagrams-first`.
+`concise` · `explanatory` · `teacher` · `reviewer` · `diagrams-first` · `ste` · `eli5`.
+
+`ste` writes in [ASD-STE100](https://asd-ste100.org) Simplified Technical English, adapted from [Ege Chelebi's ste-writing skill](https://www.chele.bi/videos/the-cure-for-ai-slop/kit/ste-writing-skill).
+
+`eli5` is [Lydia Hallie's ELI5 style](https://x.com/lydiahallie/status/2080378470111256907).
 
 ## Custom styles
 

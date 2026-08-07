@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-07
+
+### Added
+- Bundled `ste` style: ASD-STE100 Simplified Technical English (strict for procedures/errors, STE-flavored for prose).
+- Bundled `eli5` style: casual "explain like I'm 5" mode (adapted from Lydia Hallie).
+
 ## [0.1.0] - 2026-08-07
 
 ### Added
