@@ -11,6 +11,8 @@ import outputStyles, {
   projectStateFile,
   userStateFile,
   styleCompletions,
+  styleHintFor,
+  startHintPoller,
   resolveActiveStyle,
 } from "../extensions/output-styles.ts";
 
@@ -226,21 +228,36 @@ interface Captured {
   handlers: Record<string, (event: unknown, ctx: FakeCtx) => unknown>;
   statuses: (string | undefined)[];
   notes: { message: string; type?: string }[];
+  widgets: { key: string; lines: string[] | null }[];
+  timers: (() => void)[];
+  editorText: string;
 }
 interface FakeCtx {
   cwd: string;
   hasUI: boolean;
-  ui: { setStatus: (k: string, t: string | undefined) => void; notify: (m: string, t?: string) => void };
+  ui: {
+    setStatus: (k: string, t: string | undefined) => void;
+    setWidget: (k: string, lines: string[] | undefined) => void;
+    getEditorText: () => string;
+    notify: (m: string, t?: string) => void;
+  };
+  setInterval: (cb: () => void, ms?: number) => unknown;
 }
 
 function harness(cwd: string): { cap: Captured; ctx: FakeCtx } {
-  const cap: Captured = { commands: {}, handlers: {}, statuses: [], notes: [] };
+  const cap: Captured = { commands: {}, handlers: {}, statuses: [], notes: [], widgets: [], timers: [], editorText: "" };
   const ctx: FakeCtx = {
     cwd,
     hasUI: true,
     ui: {
       setStatus: (_k, t) => cap.statuses.push(t),
+      setWidget: (k, lines) => cap.widgets.push({ key: k, lines: lines ?? null }),
+      getEditorText: () => cap.editorText,
       notify: (m, t) => cap.notes.push({ message: m, type: t }),
+    },
+    setInterval: cb => {
+      cap.timers.push(cb);
+      return 0;
     },
   };
   const pi = {
@@ -465,6 +482,12 @@ describe("styleCompletions", () => {
     expect(items[0].description!.length).toBeGreaterThan(0);
   });
 
+  test("advertises the persist flags as a hint on every item", () => {
+    const items = styleCompletions("", freshCwd())!;
+    expect(items.length).toBeGreaterThan(0);
+    for (const item of items) expect(item.hint).toBe("[--save] [--project]");
+  });
+
   test("empty prefix returns all bundled styles, sorted", () => {
     const items = styleCompletions("", freshCwd())!;
     expect(items.map(i => i.value)).toEqual([
@@ -496,5 +519,50 @@ describe("styleCompletions", () => {
     mkdirSync(join(cwd, ".omp", "output-styles"), { recursive: true });
     writeFileSync(join(cwd, ".omp", "output-styles", "custom.md"), "---\nname: custom\ndescription: mine\n---\nX");
     expect(styleCompletions("cu", cwd)!.map(i => i.value)).toEqual(["custom"]);
+  });
+});
+
+describe("styleHintFor", () => {
+  test("shows the flag hint while a /style command is composed", () => {
+    for (const text of ["/style", "/style ", "/style concise", "/style concise --save", "  /style off --project"]) {
+      const lines = styleHintFor(text);
+      expect(lines).not.toBeNull();
+      expect(lines![0]).toContain("--save");
+      expect(lines![1]).toContain("--project");
+    }
+  });
+
+  test("hides the hint when the input is not a /style command", () => {
+    for (const text of ["", "hello", "/styl", "/stylex", "x /style", "/mcp add", "/style:other"]) {
+      expect(styleHintFor(text)).toBeNull();
+    }
+  });
+});
+
+describe("startHintPoller", () => {
+  test("shows the flag widget while /style is composed, then clears it", () => {
+    const cwd = mkdtempSync(join(tmpdir(), "pos-poll-"));
+    process.env.PI_OUTPUT_STYLES_HOME = mkdtempSync(join(tmpdir(), "pos-poll-home-"));
+    const { cap, ctx } = harness(cwd);
+    startHintPoller(ctx);
+    expect(cap.timers).toHaveLength(1);
+
+    cap.editorText = "/style concise";
+    cap.timers[0](); // tick 1: text changed → debounce, no widget yet
+    expect(cap.widgets).toEqual([]);
+    cap.timers[0](); // tick 2: stable → widget shown
+    expect(cap.widgets).toHaveLength(1);
+    expect(cap.widgets[0].key).toBe("pi-output-styles-hint");
+    expect(cap.widgets[0].lines!.join("\n")).toContain("--save");
+    expect(cap.widgets[0].lines!.join("\n")).toContain("--project");
+
+    cap.timers[0](); // tick 3: unchanged text → no churn
+    expect(cap.widgets).toHaveLength(1);
+
+    cap.editorText = "";
+    cap.timers[0]();
+    cap.timers[0]();
+    expect(cap.widgets).toHaveLength(2);
+    expect(cap.widgets[1].lines).toBeNull();
   });
 });

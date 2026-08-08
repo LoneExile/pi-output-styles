@@ -16,6 +16,8 @@ type NotifyType = "info" | "warning" | "error";
 
 interface ExtensionUI {
   setStatus(key: string, text: string | undefined): void;
+  setWidget(key: string, lines: string[] | undefined, options?: { placement: "aboveEditor" | "belowEditor" }): void;
+  getEditorText(): string;
   notify(message: string, type?: NotifyType): void;
 }
 
@@ -23,6 +25,7 @@ interface ExtensionContext {
   cwd: string;
   hasUI: boolean;
   ui: ExtensionUI;
+  setInterval(callback: () => void, ms?: number): unknown;
 }
 
 interface BeforeAgentStartEvent {
@@ -46,6 +49,7 @@ type EventHandler<E, R = void> = (event: E, ctx: ExtensionContext) => R | void |
 interface ExtensionAPI {
   setLabel(label: string): void;
   on(event: "session_start", handler: EventHandler<unknown>): void;
+  on(event: "session_shutdown", handler: EventHandler<unknown>): void;
   on(event: "before_agent_start", handler: EventHandler<BeforeAgentStartEvent, BeforeAgentStartResult>): void;
   registerCommand(
     name: string,
@@ -192,6 +196,47 @@ export function parseStyleCommandArgs(args: string): StyleCommandArgs {
 }
 
 const STATUS_KEY = "pi-output-styles";
+const HINT_KEY = "pi-output-styles-hint";
+// Persistent ghost hint shown below the editor while a `/style` command is
+// being composed. OMP only renders inline usage ghost text for builtin
+// commands, so this widget carries the same message for extension commands.
+const STYLE_HINT_LINES = [
+  "/style <name|off> [--save] [--project]",
+  "persist: --save (user default, --global alias) · --project (this project)",
+];
+
+// Pure matcher for the widget: show the hint while the input starts with a
+// `/style` command word (line start, with optional leading whitespace).
+export function styleHintFor(text: string): string[] | null {
+  return /^\s*\/style(?:\s|$)/.test(text) ? STYLE_HINT_LINES : null;
+}
+
+// Poller state: one started flag guards re-registration across in-process
+// session restarts; lastHintInput dedupes widget updates against the text the
+// hint was computed for.
+let started = false;
+let lastHintInput: string | null = null;
+
+// Debounced poller: only updates the widget once the input text is stable
+// across a tick and differs from the last-checked text. Exported for tests.
+export function startHintPoller(ctx: ExtensionContext): void {
+  let stableInput: string | null = null;
+  ctx.setInterval(() => {
+    const text = ctx.ui.getEditorText();
+    if (text !== stableInput) {
+      stableInput = text;
+      return;
+    }
+    const lines = styleHintFor(text);
+    if (lines !== null && lastHintInput !== text) {
+      ctx.ui.setWidget(HINT_KEY, lines, { placement: "belowEditor" });
+      lastHintInput = text;
+    } else if (lines === null && lastHintInput !== null) {
+      ctx.ui.setWidget(HINT_KEY, undefined);
+      lastHintInput = null;
+    }
+  }, 600);
+}
 
 // Session-active style selection is process-global (module-level) state.
 // This assumes one module instance per session/cwd, which holds under
@@ -209,13 +254,23 @@ function styleDirs(cwd: string): string[] {
 // Argument completions for `/style <name>`: matches style names by prefix.
 // getArgumentCompletions carries no ctx, so discovery uses process.cwd() as the
 // project scope (best-effort; the command handler still uses ctx.cwd).
+// Flags advertised as dim ghost text on every completion item, so users see
+// that a style can be persisted beyond the session with --save (user default)
+// or --project (per-project default). --global is accepted as a --save alias.
+const FLAG_HINT = "[--save] [--project]";
+
 export function styleCompletions(argumentPrefix: string, cwd: string): AutocompleteItem[] | null {
   if (argumentPrefix.includes(" ")) return null;
   const prefix = argumentPrefix.trim().toLowerCase();
   const styleItems: AutocompleteItem[] = [...discoverStyles(styleDirs(cwd)).values()]
     .sort((a, b) => a.name.localeCompare(b.name))
-    .map(s => ({ value: s.name, label: s.name, description: s.description || undefined }));
-  const offItem: AutocompleteItem = { value: "off", label: "off", description: "Turn off styling for this session" };
+    .map(s => ({ value: s.name, label: s.name, description: s.description || undefined, hint: FLAG_HINT }));
+  const offItem: AutocompleteItem = {
+    value: "off",
+    label: "off",
+    description: "Turn off styling for this session",
+    hint: FLAG_HINT,
+  };
   const items = [...styleItems, offItem].filter(i => i.value.toLowerCase().startsWith(prefix));
   return items.length > 0 ? items : null;
 }
@@ -242,6 +297,13 @@ export default function outputStyles(pi: ExtensionAPI): void {
 
   pi.on("session_start", (_event, ctx) => {
     refreshStatus(ctx, resolveActiveStyle(ctx.cwd));
+    if (started || !ctx.hasUI) return;
+    started = true;
+    startHintPoller(ctx);
+    pi.on("session_shutdown", () => {
+      started = false;
+      lastHintInput = null;
+    });
   });
 
   pi.on("before_agent_start", (event, ctx) => {

@@ -24,6 +24,7 @@ omp plugin install github:LoneExile/pi-output-styles
 - `/style <name> --save` — also save it as your personal (user) default.
 - `/style <name> --project` — save it as the project default (committed with the repo).
 - `/style off` — clear the active style for this session (overrides any saved default). `none` is an alias; `off --save` / `off --project` also clears the saved default.
+- While composing `/style`, a hint line below the input shows the available flags (`--save` / `--project`).
 
 The active style's text is **appended** to the system prompt every turn; it never replaces OMP's default behavior. The status line shows the active style.
 

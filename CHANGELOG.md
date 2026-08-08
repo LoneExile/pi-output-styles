@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-08-08
+
+### Added
+- Persistent flag hint while composing `/style`: a dim widget below the input shows `--save` (user default, `--global` alias) and `--project` (project default) once the command is detected, and clears when it is not.
+- `/style` tab-completion items advertise the persist flags as a dim hint in the dropdown.
+
 ## [0.2.0] - 2026-08-07
 
 ### Added
