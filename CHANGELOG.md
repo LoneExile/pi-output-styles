@@ -9,7 +9,9 @@
 ### Changed
 - `before_agent_start` swaps the `# Personality` slot (`applyStyleReplace`) instead of appending. Only `systemPrompt[0]` is edited. Style bodies are inserted via a replace callback so `$&` / `$$` in markdown stay literal. `applyStyle` remains the append helper for tests and comparison.
 
-## [0.2.1] - 2026-08-08
+### Fixed
+- Pi load: drop `setLabel` at factory time, skip the hint poller when `ctx.setInterval` is missing, and return `systemPrompt` as a string when Pi passes a string (OMP still uses `string[]`).
+
 
 ### Added
 - Persistent flag hint while composing `/style`: a dim widget below the input shows `--save` (user default, `--global` alias) and `--project` (project default) once the command is detected, and clears when it is not.

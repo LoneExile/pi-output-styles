@@ -471,6 +471,22 @@ describe("extension wiring", () => {
     expect(readState(userStateFile())).toEqual({});
   });
 
+  test("hook returns a string when Pi passes systemPrompt as a string", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "pos-wire-"));
+    process.env.PI_OUTPUT_STYLES_HOME = mkdtempSync(join(tmpdir(), "pos-home-"));
+    const { cap, ctx } = harness(cwd);
+    await cap.commands["style"]("teacher", ctx);
+    const result = (await cap.handlers["before_agent_start"](
+      { prompt: "hi", systemPrompt: "BASE\n\n§ Runtime\nKeep tools." },
+      ctx,
+    )) as { systemPrompt: string };
+    expect(typeof result.systemPrompt).toBe("string");
+    expect(result.systemPrompt).toContain("BASE");
+    expect(result.systemPrompt).toContain("<!-- pi-output-styles:teacher -->");
+    expect(result.systemPrompt.indexOf("# Personality")).toBeLessThan(result.systemPrompt.indexOf("§ Runtime"));
+  });
+
+
   test("/style teacher --project persists to the project state file", async () => {
     const cwd = mkdtempSync(join(tmpdir(), "pos-wire-"));
     process.env.PI_OUTPUT_STYLES_HOME = mkdtempSync(join(tmpdir(), "pos-home-"));

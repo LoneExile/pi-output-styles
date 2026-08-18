@@ -27,16 +27,16 @@ interface ExtensionContext {
   cwd: string;
   hasUI: boolean;
   ui: ExtensionUI;
-  setInterval(callback: () => void, ms?: number): unknown;
+  setInterval?(callback: () => void, ms?: number): unknown;
 }
 
 interface BeforeAgentStartEvent {
   prompt: string;
-  systemPrompt?: string[];
+  systemPrompt?: string[] | string;
 }
 
 interface BeforeAgentStartResult {
-  systemPrompt?: string[];
+  systemPrompt?: string[] | string;
 }
 
 interface AutocompleteItem {
@@ -49,7 +49,6 @@ interface AutocompleteItem {
 type EventHandler<E, R = void> = (event: E, ctx: ExtensionContext) => R | void | Promise<R | void>;
 
 interface ExtensionAPI {
-  setLabel(label: string): void;
   on(event: "session_start", handler: EventHandler<unknown>): void;
   on(event: "session_shutdown", handler: EventHandler<unknown>): void;
   on(event: "before_agent_start", handler: EventHandler<BeforeAgentStartEvent, BeforeAgentStartResult>): void;
@@ -263,6 +262,7 @@ let lastHintInput: string | null = null;
 // Debounced poller: only updates the widget once the input text is stable
 // across a tick and differs from the last-checked text. Exported for tests.
 export function startHintPoller(ctx: ExtensionContext): void {
+  if (typeof ctx.setInterval !== "function") return;
   let stableInput: string | null = null;
   ctx.setInterval(() => {
     const text = ctx.ui.getEditorText();
@@ -332,12 +332,11 @@ export function resolveActiveStyle(cwd: string, styles?: Map<string, Style>): St
 }
 
 function refreshStatus(ctx: ExtensionContext, style: Style | null): void {
-  if (ctx.hasUI) ctx.ui.setStatus(STATUS_KEY, style ? `style: ${style.name}` : undefined);
+  if (!ctx.hasUI || typeof ctx.ui.setStatus !== "function") return;
+  ctx.ui.setStatus(STATUS_KEY, style ? `style: ${style.name}` : undefined);
 }
 
 export default function outputStyles(pi: ExtensionAPI): void {
-  pi.setLabel("output-styles");
-
   pi.on("session_start", (_event, ctx) => {
     refreshStatus(ctx, resolveActiveStyle(ctx.cwd));
     if (started || !ctx.hasUI) return;
@@ -359,7 +358,13 @@ export default function outputStyles(pi: ExtensionAPI): void {
       // Apply first; only reflect the style in the status line once the
       // prompt was actually augmented, so a swallowed throw never advertises
       // a style the turn did not apply.
-      const result = { systemPrompt: applyStyleReplace(event.systemPrompt, style) };
+      // OMP: systemPrompt is string[]. Pi: a single string. Return the same shape.
+      const incoming = event.systemPrompt;
+      const systemPrompt =
+        typeof incoming === "string"
+          ? (applyStyleReplace([incoming], style)[0] ?? styleMarker(style))
+          : applyStyleReplace(incoming, style);
+      const result = { systemPrompt };
       refreshStatus(ctx, style);
       return result;
     } catch {
