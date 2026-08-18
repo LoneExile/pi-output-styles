@@ -7,7 +7,7 @@
 
 Named, swappable system-prompt styles for [Oh My Pi (OMP)](https://pi.dev) and Pi — with a live `/style` switcher. Unlike Claude Code's output styles (which need `/clear` to switch), styles here apply and switch **live, mid-session**.
 
-An active style **replaces OMP’s `# Personality` slot** (who you sound like). Tools, skills, Role, Engineering, Runtime, and later project/safety blocks stay. Custom `SYSTEM.md` with no personality heading gets the style injected before `§ Runtime`.
+An active style **replaces everything from `# Personality` through the next `§` heading** (including nested `# Tone` / `# Reasoning`). Tools, skills, Role, Engineering, Runtime, and later project/safety blocks stay. Applied every turn. Custom `SYSTEM.md` with no personality heading: inject before `§ Runtime`, else before the first other `§`, else at the end of block 0.
 
 ![/style demo](https://github.com/LoneExile/pi-output-styles/raw/main/assets/demo.gif)
 
@@ -15,21 +15,28 @@ An active style **replaces OMP’s `# Personality` slot** (who you sound like). 
 
 ```bash
 # Oh My Pi
-omp plugin uninstall pi-output-styles   # needed to leave 0.2.x; install alone is a no-op
 omp plugin install npm:pi-output-styles
 # or from source:
 omp plugin install github:LoneExile/pi-output-styles
 
 # Pi
-pi uninstall npm:pi-output-styles
 pi install npm:pi-output-styles
 # or from source:
 pi install git:github.com/LoneExile/pi-output-styles
 ```
 
-Then start a **new** session. Extensions do not hot-reload. `0.2.x` appended the style as a footnote; `0.3+` replaces the personality slot.
+Then start a **new** session. Extensions do not hot-reload.
 
+### Upgrading from 0.2.x
 
+`0.2.x` appended a footnote. `0.3+` replaces the personality slot. Lens styles (`concise`, `reviewer`, `ste`, `diagrams-first`, `explanatory`) now stand alone. Pin `0.2.1` if you need append. Uninstall first — install alone is a no-op on an existing OMP plugin:
+
+```bash
+omp plugin uninstall pi-output-styles && omp plugin install npm:pi-output-styles
+pi uninstall npm:pi-output-styles && pi install npm:pi-output-styles
+```
+
+Then a new session.
 
 ## Use
 
@@ -40,8 +47,7 @@ Then start a **new** session. Extensions do not hot-reload. `0.2.x` appended the
 - `/style off` — clear the active style for this session (overrides any saved default). `none` is an alias; `off --save` / `off --project` also clears the saved default.
 - While composing `/style`, a hint line below the input shows the available flags (`--save` / `--project`).
 
-The status line shows the active style (`style: eli5`). `/style off` restores OMP’s default personality on the next turn.
-
+The style is applied every turn. The status line shows `style: eli5`. `/style off` restores OMP’s default personality on the next turn.
 
 ## Bundled styles
 

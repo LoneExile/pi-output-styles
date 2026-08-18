@@ -210,8 +210,16 @@ describe("replacePersonalitySection", () => {
     expect(text).not.toContain("# Tone");
     expect(text).toContain("§ Role");
     expect(text).toContain("# Engineering");
-    expect(text).toContain("§ Runtime");
+    expect(text).toContain("\n\n§ Runtime");
     expect(text).toContain("`read`");
+  });
+
+  test("does not treat $ sequences in the style body as replace tokens", () => {
+    const { text } = replacePersonalitySection(OMP_DEFAULT[0], "Prefix with $& always. Use $$x^2$$.");
+    expect(text).toContain("Prefix with $& always. Use $$x^2$$.");
+    expect(text).not.toContain("Evidence-first terse engineer");
+    expect(text).not.toContain("# Tone");
+    expect(text.indexOf("# Personality")).toBeLessThan(text.indexOf("§ Runtime"));
   });
 
   test("injects before § Runtime when the personality heading is missing", () => {
@@ -219,8 +227,16 @@ describe("replacePersonalitySection", () => {
     const { text, swapped } = replacePersonalitySection(custom, "ELI5");
     expect(swapped).toBe(false);
     expect(text).toContain("# Personality\nELI5");
-    expect(text).toContain("§ Runtime");
     expect(text).toContain("§ Role");
+    expect(text.indexOf("# Personality")).toBeLessThan(text.indexOf("§ Runtime"));
+  });
+
+  test("fallback inject keeps a trailing $ in the style body", () => {
+    const custom = "§ Role\nDo the work.\n\n§ Runtime\nTools stay.";
+    const { text } = replacePersonalitySection(custom, "ends with $");
+    expect(text).toContain("# Personality\nends with $");
+    expect(text.indexOf("# Personality")).toBeLessThan(text.indexOf("§ Runtime"));
+    expect(text).toContain("\n§ Runtime\nTools stay.");
   });
 
   test("appends a personality heading when the prompt has no § sections", () => {
@@ -265,6 +281,7 @@ describe("applyStyleReplace", () => {
     expect(out).toHaveLength(1);
     expect(out[0]).toContain("§ Role\nCustom voice.");
     expect(out[0]).toContain("# Personality\n<!-- pi-output-styles:eli5 -->\nTalk like I'm 5.");
+    expect(out[0].indexOf("# Personality")).toBeLessThan(out[0].indexOf("§ Runtime"));
     expect(out[0]).toContain("§ Runtime\nKeep tools.");
   });
 
@@ -528,7 +545,7 @@ describe("extension wiring", () => {
     expect(result.systemPrompt[0]).toContain("PROJECT-OVERRIDE-BODY");
   });
 
-  test("before_agent_start never throws even if applyStyle would (malformed base)", async () => {
+  test("before_agent_start never throws even if applyStyleReplace would (malformed base)", async () => {
     const cwd = mkdtempSync(join(tmpdir(), "pos-wire-"));
     process.env.PI_OUTPUT_STYLES_HOME = mkdtempSync(join(tmpdir(), "pos-home-"));
     const { cap, ctx } = harness(cwd);

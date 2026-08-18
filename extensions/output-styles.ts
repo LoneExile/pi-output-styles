@@ -182,15 +182,15 @@ export function applyStyle(baseBlocks: string[] | undefined, style: Style): stri
 // `§ Role`, else append — always inside block 0. We never delete tools,
 // skills, or safety blocks.
 // /m makes $ end-of-line; (?![\s\S]) is true EOF so # Tone inside the slot is consumed.
-const PERSONALITY_SECTION = /^# Personality[ \t]*(?:\r?\n)[\s\S]*?(?=\r?\n§ |(?![\s\S]))/m;
+const PERSONALITY_SECTION = /^# Personality[ \t]*(?:\r?\n)[\s\S]*?(?=\r?\n\r?\n§ |\r?\n§ |(?![\s\S]))/m;
 
 export function replacePersonalitySection(text: string, inner: string): { text: string; swapped: boolean } {
   if (PERSONALITY_SECTION.test(text)) {
-    return { text: text.replace(PERSONALITY_SECTION, `# Personality\n${inner}`), swapped: true };
+    return { text: text.replace(PERSONALITY_SECTION, () => `# Personality\n${inner}`), swapped: true };
   }
-  const beforeRuntime = text.replace(/(\r?\n)§ Runtime\b/, `\n\n# Personality\n${inner}$1§ Runtime`);
+  const beforeRuntime = text.replace(/(\r?\n)§ Runtime\b/, (_m, nl: string) => `\n\n# Personality\n${inner}${nl}§ Runtime`);
   if (beforeRuntime !== text) return { text: beforeRuntime, swapped: false };
-  const beforeOther = text.replace(/(\r?\n)§ (?!Role\b)/, `\n\n# Personality\n${inner}$1§ `);
+  const beforeOther = text.replace(/(\r?\n)§ (?!Role\b)/, (_m, nl: string) => `\n\n# Personality\n${inner}${nl}§ `);
   if (beforeOther !== text) return { text: beforeOther, swapped: false };
   return { text: `${text}\n\n# Personality\n${inner}`, swapped: false };
 }
