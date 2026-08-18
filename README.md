@@ -5,17 +5,38 @@
 [![CI](https://github.com/LoneExile/pi-output-styles/actions/workflows/ci.yml/badge.svg)](https://github.com/LoneExile/pi-output-styles/actions/workflows/ci.yml)
 [![license](https://img.shields.io/npm/l/pi-output-styles.svg)](./LICENSE)
 
-Named, swappable, **append-only** system-prompt styles for [Oh My Pi (OMP)](https://pi.dev) and Pi — with a live `/style` switcher. Unlike Claude Code's output styles (which need `/clear` to switch), styles here apply and switch **live, mid-session**.
+Named, swappable system-prompt styles for [Oh My Pi (OMP)](https://pi.dev) and Pi — with a live `/style` switcher. Unlike Claude Code's output styles (which need `/clear` to switch), styles here apply and switch **live, mid-session**.
+
+An active style **replaces everything from `# Personality` through the next `§` heading** (including nested `# Tone` / `# Reasoning`). Tools, skills, Role, Engineering, Runtime, and later project/safety blocks stay. Applied every turn. Custom `SYSTEM.md` with no personality heading: inject before `§ Runtime`, else before the first other `§`, else at the end of block 0.
 
 ![/style demo](https://github.com/LoneExile/pi-output-styles/raw/main/assets/demo.gif)
 
 ## Install
 
 ```bash
+# Oh My Pi
 omp plugin install npm:pi-output-styles
 # or from source:
 omp plugin install github:LoneExile/pi-output-styles
+
+# Pi
+pi install npm:pi-output-styles
+# or from source:
+pi install git:github.com/LoneExile/pi-output-styles
 ```
+
+Then start a **new** session. Extensions do not hot-reload.
+
+### Upgrading from 0.2.x
+
+`0.2.x` appended a footnote. `0.3+` replaces the personality slot. Lens styles (`concise`, `reviewer`, `ste`, `diagrams-first`, `explanatory`) now stand alone. Pin `0.2.1` if you need append. Uninstall first — install alone is a no-op on an existing OMP plugin:
+
+```bash
+omp plugin uninstall pi-output-styles && omp plugin install npm:pi-output-styles
+pi uninstall npm:pi-output-styles && pi install npm:pi-output-styles
+```
+
+Then a new session.
 
 ## Use
 
@@ -26,7 +47,7 @@ omp plugin install github:LoneExile/pi-output-styles
 - `/style off` — clear the active style for this session (overrides any saved default). `none` is an alias; `off --save` / `off --project` also clears the saved default.
 - While composing `/style`, a hint line below the input shows the available flags (`--save` / `--project`).
 
-The active style's text is **appended** to the system prompt every turn; it never replaces OMP's default behavior. The status line shows the active style.
+The style is applied every turn. The status line shows `style: eli5`. `/style off` restores OMP’s default personality on the next turn.
 
 ## Bundled styles
 
@@ -51,7 +72,7 @@ description: Teach as you go
 Act as a patient teacher. Explain the concept before applying it.
 ```
 
-The body is appended to the prompt. Precedence — **definitions**: project > user > bundled; **which style is active**: session `/style` > user default > project default.
+The body becomes the personality slot. Precedence — **definitions**: project > user > bundled; **which style is active**: session `/style` > user default > project default.
 
 ## Config
 

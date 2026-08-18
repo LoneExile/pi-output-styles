@@ -6,6 +6,8 @@ import outputStyles, {
   writeState,
   resolveActiveName,
   applyStyle,
+  applyStyleReplace,
+  replacePersonalitySection,
   parseStyleCommandArgs,
   bundledStylesDir,
   projectStateFile,
@@ -176,6 +178,152 @@ describe("applyStyle", () => {
   });
 });
 
+const OMP_DEFAULT = [
+  [
+    "§ Role",
+    "Helpful, trusted assistant for load-bearing changes.",
+    "",
+    "# Engineering",
+    "- Correctness first.",
+    "",
+    "# Personality",
+    "Evidence-first terse engineer: every sentence fact, decision, or risk.",
+    "",
+    "# Tone",
+    "- Fragments when clearer; no ceremony.",
+    "",
+    "§ Runtime",
+    "# Skills & Rules",
+    "- Matching skill → MUST read skill:// first.",
+    "# Tool Inventory",
+    "- `read`",
+  ].join("\n"),
+  "PROJECT: cwd and repo context. Keep this.",
+];
+
+describe("replacePersonalitySection", () => {
+  test("swaps the personality slot and stops at the next § heading", () => {
+    const { text, swapped } = replacePersonalitySection(OMP_DEFAULT[0], "BE A KID.");
+    expect(swapped).toBe(true);
+    expect(text).toContain("# Personality\nBE A KID.");
+    expect(text).not.toContain("Evidence-first terse engineer");
+    expect(text).not.toContain("# Tone");
+    expect(text).toContain("§ Role");
+    expect(text).toContain("# Engineering");
+    expect(text).toContain("\n\n§ Runtime");
+    expect(text).toContain("`read`");
+  });
+
+  test("does not treat $ sequences in the style body as replace tokens", () => {
+    const { text } = replacePersonalitySection(OMP_DEFAULT[0], "Prefix with $& always. Use $$x^2$$.");
+    expect(text).toContain("Prefix with $& always. Use $$x^2$$.");
+    expect(text).not.toContain("Evidence-first terse engineer");
+    expect(text).not.toContain("# Tone");
+    expect(text.indexOf("# Personality")).toBeLessThan(text.indexOf("§ Runtime"));
+  });
+
+  test("injects before § Runtime when the personality heading is missing", () => {
+    const custom = "§ Role\nDo the work.\n\n§ Runtime\nTools stay.";
+    const { text, swapped } = replacePersonalitySection(custom, "ELI5");
+    expect(swapped).toBe(false);
+    expect(text).toContain("# Personality\nELI5");
+    expect(text).toContain("§ Role");
+    expect(text.indexOf("# Personality")).toBeLessThan(text.indexOf("§ Runtime"));
+  });
+
+  test("fallback inject keeps a trailing $ in the style body", () => {
+    const custom = "§ Role\nDo the work.\n\n§ Runtime\nTools stay.";
+    const { text } = replacePersonalitySection(custom, "ends with $");
+    expect(text).toContain("# Personality\nends with $");
+    expect(text.indexOf("# Personality")).toBeLessThan(text.indexOf("§ Runtime"));
+    expect(text).toContain("\n§ Runtime\nTools stay.");
+  });
+
+  test("appends a personality heading when the prompt has no § sections", () => {
+    const { text, swapped } = replacePersonalitySection("Just a custom SYSTEM.md.", "ELI5");
+    expect(swapped).toBe(false);
+    expect(text).toBe("Just a custom SYSTEM.md.\n\n# Personality\nELI5");
+  });
+});
+
+describe("applyStyleReplace", () => {
+  const style = { name: "eli5", description: "", body: "Talk like I'm 5." };
+
+  test("swaps personality in block 0 and leaves later blocks untouched", () => {
+    const out = applyStyleReplace(OMP_DEFAULT, style);
+    expect(out.length).toBe(2);
+    expect(out[0]).toContain("<!-- pi-output-styles:eli5 -->\nTalk like I'm 5.");
+    expect(out[0]).not.toContain("Evidence-first terse engineer");
+    expect(out[0]).not.toContain("# Tone");
+    expect(out[0]).toContain("# Engineering");
+    expect(out[0]).toContain("§ Runtime");
+    expect(out[1]).toBe(OMP_DEFAULT[1]);
+  });
+
+  test("coerces undefined base to a single marked block", () => {
+    expect(applyStyleReplace(undefined, style)).toEqual(["<!-- pi-output-styles:eli5 -->\nTalk like I'm 5."]);
+  });
+
+  test("is idempotent when a marker block is already present", () => {
+    const once = applyStyleReplace(OMP_DEFAULT, style);
+    expect(applyStyleReplace(once, style)).toEqual(once);
+  });
+
+  test("does not apply a second style when a marker is already present", () => {
+    const other = { name: "teacher", description: "", body: "Teach." };
+    const once = applyStyleReplace(OMP_DEFAULT, style);
+    expect(applyStyleReplace(once, other)).toEqual(once);
+  });
+
+  test("injects into a custom prompt that has § Runtime but no personality slot", () => {
+    const custom = ["§ Role\nCustom voice.\n\n§ Runtime\nKeep tools."];
+    const out = applyStyleReplace(custom, style);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toContain("§ Role\nCustom voice.");
+    expect(out[0]).toContain("# Personality\n<!-- pi-output-styles:eli5 -->\nTalk like I'm 5.");
+    expect(out[0].indexOf("# Personality")).toBeLessThan(out[0].indexOf("§ Runtime"));
+    expect(out[0]).toContain("§ Runtime\nKeep tools.");
+  });
+
+  test("does not rewrite a later block that quotes # Personality or § Runtime", () => {
+    const quoted = [
+      "From the project README:",
+      "",
+      "# Personality",
+      "Quoted engineer voice that must stay in docs.",
+      "",
+      "§ Runtime",
+      "Quoted tools heading.",
+    ].join("\n");
+    const customBlock0 = "§ Role\nCustom voice.\n\n§ Runtime\nKeep tools.";
+    const out = applyStyleReplace([customBlock0, quoted], style);
+    expect(out[0]).toContain("# Personality\n<!-- pi-output-styles:eli5 -->\nTalk like I'm 5.");
+    expect(out[0]).toContain("§ Role\nCustom voice.");
+    expect(out[1]).toBe(quoted);
+    expect(out[1]).not.toContain("pi-output-styles");
+  });
+});
+
+describe("replace vs append on the same OMP fixture", () => {
+  const style = { name: "eli5", description: "", body: "Talk like I'm 5." };
+
+  test("append keeps the engineer voice; replace removes it", () => {
+    const appended = applyStyle(OMP_DEFAULT, style);
+    expect(appended[0]).toContain("Evidence-first terse engineer");
+    expect(appended[0]).toContain("# Tone");
+    expect(appended.at(-1)).toContain("<!-- pi-output-styles:eli5 -->");
+
+    const replaced = applyStyleReplace(OMP_DEFAULT, style);
+    expect(replaced[0]).not.toContain("Evidence-first terse engineer");
+    expect(replaced[0]).not.toContain("# Tone");
+    expect(replaced[0]).toContain("<!-- pi-output-styles:eli5 -->\nTalk like I'm 5.");
+    expect(replaced[0]).toContain("# Engineering");
+    expect(replaced[0]).toContain("§ Runtime");
+    expect(replaced[1]).toBe(OMP_DEFAULT[1]);
+    expect(replaced).toHaveLength(OMP_DEFAULT.length);
+  });
+});
+
 describe("parseStyleCommandArgs", () => {
   test("bare name → session scope", () => {
     expect(parseStyleCommandArgs("teacher")).toEqual({ name: "teacher", persist: "none" });
@@ -304,7 +452,7 @@ describe("extension wiring", () => {
     expect(result).toBeUndefined();
   });
 
-  test("/style teacher (session) → hook appends the teacher block", async () => {
+  test("/style teacher (session) → hook replaces/injects the teacher block", async () => {
     const cwd = mkdtempSync(join(tmpdir(), "pos-wire-"));
     process.env.PI_OUTPUT_STYLES_HOME = mkdtempSync(join(tmpdir(), "pos-home-"));
     const { cap, ctx } = harness(cwd);
@@ -313,14 +461,31 @@ describe("extension wiring", () => {
       { prompt: "hi", systemPrompt: ["BASE"] },
       ctx,
     )) as { systemPrompt: string[] };
-    expect(result.systemPrompt[0]).toBe("BASE");
-    expect(result.systemPrompt[1]).toContain("<!-- pi-output-styles:teacher -->");
+    expect(result.systemPrompt).toHaveLength(1);
+    expect(result.systemPrompt[0]).toContain("BASE");
+    expect(result.systemPrompt[0]).toContain("<!-- pi-output-styles:teacher -->");
     expect(cap.notes.some(n => n.type === "info")).toBe(true);
     // Personal-by-default: a bare /style (no --save/--project flag) must not
     // persist anything to disk — only sessionActive (in-memory) changes.
     expect(readState(projectStateFile(cwd))).toEqual({});
     expect(readState(userStateFile())).toEqual({});
   });
+
+  test("hook returns a string when Pi passes systemPrompt as a string", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "pos-wire-"));
+    process.env.PI_OUTPUT_STYLES_HOME = mkdtempSync(join(tmpdir(), "pos-home-"));
+    const { cap, ctx } = harness(cwd);
+    await cap.commands["style"]("teacher", ctx);
+    const result = (await cap.handlers["before_agent_start"](
+      { prompt: "hi", systemPrompt: "BASE\n\n§ Runtime\nKeep tools." },
+      ctx,
+    )) as { systemPrompt: string };
+    expect(typeof result.systemPrompt).toBe("string");
+    expect(result.systemPrompt).toContain("BASE");
+    expect(result.systemPrompt).toContain("<!-- pi-output-styles:teacher -->");
+    expect(result.systemPrompt.indexOf("# Personality")).toBeLessThan(result.systemPrompt.indexOf("§ Runtime"));
+  });
+
 
   test("/style teacher --project persists to the project state file", async () => {
     const cwd = mkdtempSync(join(tmpdir(), "pos-wire-"));
@@ -369,14 +534,14 @@ describe("extension wiring", () => {
       { prompt: "hi", systemPrompt: ["BASE"] },
       ctx,
     )) as { systemPrompt: string[] };
-    expect(first.systemPrompt[1]).toContain("<!-- pi-output-styles:teacher -->");
+    expect(first.systemPrompt[0]).toContain("<!-- pi-output-styles:teacher -->");
 
     await cap.commands["style"]("nope-not-real", ctx);
     const second = (await cap.handlers["before_agent_start"](
       { prompt: "hi", systemPrompt: ["BASE"] },
       ctx,
     )) as { systemPrompt: string[] };
-    expect(second.systemPrompt[1]).toContain("<!-- pi-output-styles:teacher -->");
+    expect(second.systemPrompt[0]).toContain("<!-- pi-output-styles:teacher -->");
   });
 
   test("/style teacher resolves the project-local definition over the bundled one", async () => {
@@ -393,10 +558,10 @@ describe("extension wiring", () => {
       { prompt: "hi", systemPrompt: ["BASE"] },
       ctx,
     )) as { systemPrompt: string[] };
-    expect(result.systemPrompt[1]).toContain("PROJECT-OVERRIDE-BODY");
+    expect(result.systemPrompt[0]).toContain("PROJECT-OVERRIDE-BODY");
   });
 
-  test("before_agent_start never throws even if applyStyle would (malformed base)", async () => {
+  test("before_agent_start never throws even if applyStyleReplace would (malformed base)", async () => {
     const cwd = mkdtempSync(join(tmpdir(), "pos-wire-"));
     process.env.PI_OUTPUT_STYLES_HOME = mkdtempSync(join(tmpdir(), "pos-home-"));
     const { cap, ctx } = harness(cwd);
@@ -425,7 +590,7 @@ describe("extension wiring", () => {
       { prompt: "hi", systemPrompt: ["BASE"] },
       ctx,
     )) as { systemPrompt: string[] };
-    expect(result.systemPrompt[1]).toContain("<!-- pi-output-styles:teacher -->");
+    expect(result.systemPrompt[0]).toContain("<!-- pi-output-styles:teacher -->");
   });
 
   test("/style (no args) lists styles with their descriptions", async () => {
