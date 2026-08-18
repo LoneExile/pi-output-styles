@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-08-18
+
+> **Upgrade note.** `/style` now replaces the `# Personality` slot instead of appending a footnote. Tools, skills, and later blocks are unchanged. Saved defaults still apply — they will now actually change the voice. Leave 0.2.x, then open a new session: OMP `omp plugin uninstall pi-output-styles && omp plugin install npm:pi-output-styles` · Pi `pi uninstall npm:pi-output-styles && pi install npm:pi-output-styles`.
+
+### Changed
+- `before_agent_start` swaps the `# Personality` slot (`applyStyleReplace`) instead of appending. Nested `# Tone` goes with the slot. Only `systemPrompt[0]` is edited, so later blocks that quote those headings stay untouched. `applyStyle` remains the append helper for tests and comparison.
+
+
 ## [0.2.1] - 2026-08-08
 
 ### Added

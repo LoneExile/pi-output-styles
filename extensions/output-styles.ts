@@ -1,4 +1,6 @@
-// pi-output-styles — named, append-only system-prompt styles for OMP/Pi.
+// pi-output-styles — named system-prompt styles for OMP/Pi.
+// applyStyle = append (kept for tests). applyStyleReplace = swap the OMP
+// personality slot and keep tools/rules. The hook uses replace.
 // Pure helpers are exported for unit testing.
 
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -160,10 +162,51 @@ export function resolveActiveName(
 
 const MARKER_PREFIX = "<!-- pi-output-styles:";
 
+export function styleMarker(style: Style): string {
+  return `${MARKER_PREFIX}${style.name} -->\n${style.body}`;
+}
+
 export function applyStyle(baseBlocks: string[] | undefined, style: Style): string[] {
   const base = Array.isArray(baseBlocks) ? baseBlocks : [];
   if (base.some(b => b.includes(MARKER_PREFIX))) return base;
-  return [...base, `${MARKER_PREFIX}${style.name} -->\n${style.body}`];
+  return [...base, styleMarker(style)];
+}
+
+// OMP default template (system-prompt.md) inlines personality as:
+//   # Personality
+//   <preset>
+//   § Runtime
+// Nested # Tone / # Reasoning headings sit inside that slot. The next `§ `
+// heading (usually `§ Runtime`) is the hard stop. Custom SYSTEM.md omits the
+// slot; we then inject before `§ Runtime`, else before any `§ ` that is not
+// `§ Role`, else append — always inside block 0. We never delete tools,
+// skills, or safety blocks.
+// /m makes $ end-of-line; (?![\s\S]) is true EOF so # Tone inside the slot is consumed.
+const PERSONALITY_SECTION = /^# Personality[ \t]*(?:\r?\n)[\s\S]*?(?=\r?\n§ |(?![\s\S]))/m;
+
+export function replacePersonalitySection(text: string, inner: string): { text: string; swapped: boolean } {
+  if (PERSONALITY_SECTION.test(text)) {
+    return { text: text.replace(PERSONALITY_SECTION, `# Personality\n${inner}`), swapped: true };
+  }
+  const beforeRuntime = text.replace(/(\r?\n)§ Runtime\b/, `\n\n# Personality\n${inner}$1§ Runtime`);
+  if (beforeRuntime !== text) return { text: beforeRuntime, swapped: false };
+  const beforeOther = text.replace(/(\r?\n)§ (?!Role\b)/, `\n\n# Personality\n${inner}$1§ `);
+  if (beforeOther !== text) return { text: beforeOther, swapped: false };
+  return { text: `${text}\n\n# Personality\n${inner}`, swapped: false };
+}
+
+// Personality lives in block 0 of OMP's rebuilt-per-turn systemPrompt.
+// Later blocks are project context / README and may quote `# Personality`
+// or `§ Runtime` in prose — never scan them.
+export function applyStyleReplace(baseBlocks: string[] | undefined, style: Style): string[] {
+  const base = Array.isArray(baseBlocks) ? baseBlocks : [];
+  if (base.some(b => b.includes(MARKER_PREFIX))) return base;
+  const marked = styleMarker(style);
+  if (base.length === 0) return [marked];
+
+  const out = base.slice();
+  out[0] = replacePersonalitySection(out[0], marked).text;
+  return out;
 }
 
 export type PersistScope = "none" | "user" | "project";
@@ -316,7 +359,7 @@ export default function outputStyles(pi: ExtensionAPI): void {
       // Apply first; only reflect the style in the status line once the
       // prompt was actually augmented, so a swallowed throw never advertises
       // a style the turn did not apply.
-      const result = { systemPrompt: applyStyle(event.systemPrompt, style) };
+      const result = { systemPrompt: applyStyleReplace(event.systemPrompt, style) };
       refreshStatus(ctx, style);
       return result;
     } catch {
@@ -325,7 +368,7 @@ export default function outputStyles(pi: ExtensionAPI): void {
   });
 
   pi.registerCommand("style", {
-    description: "Select an append-only output style, or clear it. Usage: /style [name|off] [--save] [--project]",
+    description: "Select an output style (replaces the OMP personality slot), or clear it. Usage: /style [name|off] [--save] [--project]",
     getArgumentCompletions: argumentPrefix => styleCompletions(argumentPrefix, process.cwd()),
     handler: (args, ctx) => {
       const { name, persist } = parseStyleCommandArgs(args);
