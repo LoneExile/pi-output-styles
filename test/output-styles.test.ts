@@ -360,9 +360,9 @@ describe("bundled styles", () => {
     expect(existsSync(bundledStylesDir())).toBe(true);
   });
 
-  test("all seven starter styles discover with non-empty bodies", () => {
+  test("all eight starter styles discover with non-empty bodies", () => {
     const m = discoverStyles([bundledStylesDir()]);
-    for (const name of ["concise", "explanatory", "teacher", "reviewer", "diagrams-first", "ste", "eli5"]) {
+    for (const name of ["omp", "concise", "explanatory", "teacher", "reviewer", "diagrams-first", "ste", "eli5"]) {
       expect(m.has(name)).toBe(true);
       expect(m.get(name)!.body.length).toBeGreaterThan(0);
       expect(m.get(name)!.description.length).toBeGreaterThan(0);
@@ -660,6 +660,7 @@ describe("styleCompletions", () => {
       "diagrams-first",
       "eli5",
       "explanatory",
+      "omp",
       "reviewer",
       "ste",
       "teacher",
