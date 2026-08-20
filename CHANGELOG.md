@@ -2,10 +2,13 @@
 
 ## [Unreleased]
 
-## [0.3.1] - 2026-08-20
+## [0.3.2] - 2026-08-20
 
 ### Added
-- Bundled `omp` style: Oh My Pi's own built-in [`personality: default`](https://github.com/can1357/oh-my-pi/blob/main/packages/coding-agent/src/prompts/system/personalities/default.md) (evidence-first terse engineer), so it can be pinned explicitly or used as-is by Pi, which has no native personality picker.
+- Bundled `omp-friendly` and `omp-pragmatic` styles: Oh My Pi's other two built-in `personality` presets, alongside `omp-default`.
+
+### Changed
+- Renamed the `omp` bundled style to `omp-default`, to match the new `omp-friendly` / `omp-pragmatic` naming. If you had `/style omp` selected or saved (`--save`/`--project`), switch to `omp-default`.
 
 ## [0.3.0] - 2026-08-18
 
