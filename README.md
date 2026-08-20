@@ -51,7 +51,9 @@ The style is applied every turn. The status line shows `style: eli5`. `/style of
 
 ## Bundled styles
 
-`concise` · `explanatory` · `teacher` · `reviewer` · `diagrams-first` · `ste` · `eli5`.
+`omp` · `concise` · `explanatory` · `teacher` · `reviewer` · `diagrams-first` · `ste` · `eli5`.
+
+`omp` is Oh My Pi's own built-in [`personality: default`](https://github.com/can1357/oh-my-pi/blob/main/packages/coding-agent/src/prompts/system/personalities/default.md) — the voice active when no style is selected. Useful to pin explicitly, or as a base for Pi users (who have no native personality picker).
 
 `ste` writes in [ASD-STE100](https://asd-ste100.org) Simplified Technical English, adapted from [Ege Chelebi's ste-writing skill](https://www.chele.bi/videos/the-cure-for-ai-slop/kit/ste-writing-skill).
 
