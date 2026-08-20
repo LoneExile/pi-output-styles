@@ -10,6 +10,11 @@
 ### Changed
 - Renamed the `omp` bundled style to `omp-default`, to match the new `omp-friendly` / `omp-pragmatic` naming. If you had `/style omp` selected or saved (`--save`/`--project`), switch to `omp-default`.
 
+## [0.3.1] - 2026-08-20
+
+### Added
+- Bundled `omp` style: Oh My Pi's own built-in [`personality: default`](https://github.com/can1357/oh-my-pi/blob/main/packages/coding-agent/src/prompts/system/personalities/default.md) (evidence-first terse engineer), so it can be pinned explicitly or used as-is by Pi, which has no native personality picker.
+
 ## [0.3.0] - 2026-08-18
 
 > **Upgrade note.** `/style` now replaces everything from `# Personality` through the next `§` heading (including nested `# Tone` / `# Reasoning`) instead of appending a footnote. Tools, skills, Role, Engineering, Runtime, and later blocks stay. Lens styles (`concise`, `reviewer`, `ste`, `diagrams-first`, `explanatory`) now *are* the persona — they no longer layer on the default engineer voice. Saved defaults still apply. Pin `0.2.1` if you need append. Leave 0.2.x, then a new session: OMP `omp plugin uninstall pi-output-styles && omp plugin install npm:pi-output-styles` · Pi `pi uninstall npm:pi-output-styles && pi install npm:pi-output-styles`.
