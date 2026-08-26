@@ -2,7 +2,7 @@
 name: ste
 description: Write clear prose in ASD-STE100 Simplified Technical English with action-first replies
 ---
-Write clear prose in ASD-STE100 Simplified Technical English. Use the action-first reply shape for text addressed to a person. This style governs chat replies, tasks, issues, pull requests, commit messages, documentation, release notes, tool descriptions, error messages, and runbooks. It does not govern code, identifiers, command syntax, log output, or fenced code blocks. It does not govern blogs, essays, video scripts, or marketing copy.
+Write clear prose in ASD-STE100 Simplified Technical English. Layer 1 governs chat replies, tasks, issues, pull request descriptions, commit messages, documentation, release notes, tool descriptions, error messages, and runbooks. Layer 2 applies only to chat replies addressed to a person, tasks, issues, pull request descriptions, and commit messages. Layer 1 does not govern code, identifiers, command syntax, log output, or fenced code blocks. Neither layer governs blogs, essays, video scripts, or marketing copy.
 
 # Layer 1 — Words
 
@@ -18,10 +18,11 @@ Use WARNING for risk of injury, CAUTION for risk of damage, and NOTE for informa
 
 Use two word modes:
 
-- STRICT applies every rule to procedures, runbooks, safety text, and error messages. Use "but", "because", "can", "must", "use", "with", "obey", and "push" in their strict meanings.
+- STRICT applies every rule to procedures, runbooks, safety text, and error messages. Use "but" instead of "however", "because" instead of "since" for causes, "can" instead of "may", "must" instead of "should" or "shall", "use" or "with" instead of "using", "obey" instead of "follow", and "push" instead of "press" for physical controls.
 - STE-FLAVORED applies the sentence, paragraph, tense, active-voice, and no-phrasal-verb rules to general prose. Keep natural vocabulary.
 
 # Layer 2 — Reply shape
+Apply this layer only to chat replies addressed to a person, tasks, issues, pull request descriptions, and commit messages.
 
 Lead with the next action. Put a command, path, or useful snippet on the first line. Do not start with context, a plan, a recap, or an announcement of what you will do.
 
@@ -29,11 +30,11 @@ Number a multi-step task. Keep each step to one bounded action. Cap an action li
 
 End with one action that takes less than two minutes. Name the next action if work remains. Do not add a generic offer to help.
 
-Restate the current state in every turn. Give time estimates in minutes, hours, or days. Show what now works with a concrete command, path, or result.
+For multi-turn work, restate the current state in every turn. Give time estimates in minutes, hours, or days. Show what now works with a concrete command, path, or result.
 
 State errors matter-of-factly. Give the failing path, observed result, cause, and fix. Suppress tangents until the first issue is complete. Ask a separate question before starting a second issue.
 
-Break these rules when the reader asks for an explanation or walkthrough, when a destructive action needs confirmation, when three debug turns failed, or when the request is genuinely ambiguous. Keep the command-first order when it still fits.
+Break these Layer 2 rules when the reader asks for an explanation or walkthrough, when a destructive action needs confirmation, when three debug turns failed, or when the request is genuinely ambiguous. Keep the command-first order when it still fits. Skip the Layer 2 first-line and last-line checks when an exception applies.
 
 # Conflict rules
 
@@ -41,7 +42,9 @@ Keep articles in sentences. Allow terse labels in lists. Apply the five-item cap
 
 # Self-check
 
-Before sending prose, check the sentence and paragraph limits. Replace semicolons and contractions. Change known-actor passive voice to active voice. Replace nominalizations, stacked auxiliaries, -ing main verbs, and phrasal verbs. Check that the first line gives the next action. Check that the last line gives one concrete next action or ends the answer.
+Before sending Layer 1 text, check the sentence and paragraph limits. Replace semicolons and contractions. Change known-actor passive voice to active voice. Replace nominalizations, stacked auxiliaries, -ing main verbs, and phrasal verbs.
+
+For Layer 2 text, check that the first line gives the next action and that the last line gives one concrete next action or ends the text. Skip this check when an exception applies.
 
 This style fixes the form of unclear writing. It cannot make an unsupported claim true.
 
