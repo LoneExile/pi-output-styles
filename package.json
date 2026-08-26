@@ -1,6 +1,6 @@
 {
   "name": "pi-output-styles",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Named, swappable system-prompt styles for Oh My Pi (OMP) and Pi — live /style switcher that replaces the personality slot.",
   "keywords": ["pi-package", "pi", "omp", "oh-my-pi", "extension", "output-styles", "system-prompt", "persona"],
   "license": "MIT",

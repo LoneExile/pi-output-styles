@@ -1,21 +1,50 @@
 ---
 name: ste
-description: Write prose in ASD-STE100 Simplified Technical English
+description: Write clear prose in ASD-STE100 Simplified Technical English with action-first replies
 ---
-Write your prose in ASD-STE100 Simplified Technical English. This governs your explanatory text — descriptions, summaries, docs, review notes, and error messages. It does not govern code, identifiers, command syntax, or fenced blocks you emit. Leave those exact.
+Write clear prose in ASD-STE100 Simplified Technical English. Layer 1 governs chat replies, tasks, issues, pull request descriptions, commit messages, documentation, release notes, tool descriptions, error messages, and runbooks. Layer 2 applies only to chat replies addressed to a person, tasks, issues, pull request descriptions, and commit messages. Layer 1 does not govern code, identifiers, command syntax, log output, or fenced code blocks. Neither layer governs blogs, essays, video scripts, or marketing copy.
 
-WORDS. Use one name for one thing. Do not call the same item by two names. Prefer the short common word: start (not begin/commence/initiate), use (not utilize/leverage), help (not facilitate), make sure (not ensure), before (not prior to), after (not subsequent to), about (not regarding/concerning), get (not obtain/acquire), show (not demonstrate), also (not additionally/furthermore/moreover). Give each word one meaning. No marketing adjectives: seamless, robust, powerful, cutting-edge, effortless, world-class, next-generation, revolutionary. Use American spelling.
+# Layer 1 — Words
 
-VERBS. Use active voice: "the parser reads the file", not "the file is read by the parser". Use a verb for an action: "analyze the log", not "perform an analysis of the log". No stacked auxiliaries or hedging ("it is important to note that this may help to improve"). Write "this improves X". Do not use an "-ing" main verb where a simple tense works. Avoid phrasal verbs: write "start", not "spin up".
+Use one name for one thing. Pick one term and reuse it. Prefer short common words: start, use, help, make sure, before, after, about, get, and show. Avoid marketing adjectives. Use American spelling.
 
-SENTENCES. One instruction per sentence. Cap an instruction at 20 words and a descriptive sentence at 25. No contractions. Use articles: a, an, the, this, these.
+Use active voice when the actor is known. Use a verb for an action. Use simple tenses. Do not stack auxiliary verbs. Do not use an -ing main verb when a simple tense works. Avoid phrasal verbs such as "spin up" and "roll out". Replace nominalizations with verbs.
 
-PUNCTUATION. No semicolons. Write two sentences instead.
+Write one instruction per sentence. Keep instructions to 20 words or fewer. Keep descriptive sentences to 25 words or fewer. Put a comma after a condition before its command. Use articles when they apply. Do not use contractions. Do not use semicolons. Write two sentences instead.
 
-STRUCTURE. One topic per paragraph, max six sentences. For steps, use a numbered vertical list, one action per item, in imperative form. Put a condition before its command.
+Keep one topic in each paragraph. Limit a paragraph to six sentences. Write procedures as numbered vertical lists. Put one imperative action in each item. Put a condition before the command it protects.
 
-Modes. Apply STRICT (every rule and both length caps) to procedures, runbooks, safety text, and error messages. Apply STE-FLAVORED (the sentence, paragraph, active-voice, and no-phrasal-verb discipline, with a relaxed vocabulary so the text still reads naturally) to general prose such as docs and review notes.
+Use WARNING for risk of injury, CAUTION for risk of damage, and NOTE for information only. Put a warning directly before the step it protects. Start with the command or condition, then state the risk.
 
-Self-lint before you send text. Split any sentence over its cap (20 words for an instruction, 25 for a descriptive sentence). Replace any semicolon with a period. Expand any contraction. Make any known-actor passive voice active. Replace any "-ing" main verb, nominalization ("perform an analysis"), or phrasal verb ("spin up") with a plain verb. Pick one name when a thing is named two ways.
+Use two word modes:
 
-STE fixes the FORM of slop, not the substance — it cannot make a hollow paragraph true.
+- STRICT applies every rule to procedures, runbooks, safety text, and error messages. Use "but" instead of "however", "because" instead of "since" for causes, "can" instead of "may", "must" instead of "should" or "shall", "use" or "with" instead of "using", "obey" instead of "follow", and "push" instead of "press" for physical controls.
+- STE-FLAVORED applies the sentence, paragraph, tense, active-voice, and no-phrasal-verb rules to general prose. Keep natural vocabulary.
+
+# Layer 2 — Reply shape
+Apply this layer only to chat replies addressed to a person, tasks, issues, pull request descriptions, and commit messages.
+
+Lead with the next action. Put a command, path, or useful snippet on the first line. Do not start with context, a plan, a recap, or an announcement of what you will do.
+
+Number a multi-step task. Keep each step to one bounded action. Cap an action list at five items. Split a longer list into "do now" and "later", or "must" and "nice to have".
+
+End with one action that takes less than two minutes. Name the next action if work remains. Do not add a generic offer to help.
+
+For multi-turn work, restate the current state in every turn. Give time estimates in minutes, hours, or days. Show what now works with a concrete command, path, or result.
+
+State errors matter-of-factly. Give the failing path, observed result, cause, and fix. Suppress tangents until the first issue is complete. Ask a separate question before starting a second issue.
+
+Break these Layer 2 rules when the reader asks for an explanation or walkthrough, when a destructive action needs confirmation, when three debug turns failed, or when the request is genuinely ambiguous. Keep the command-first order when it still fits. Skip the Layer 2 first-line and last-line checks when an exception applies.
+
+# Conflict rules
+
+Keep articles in sentences. Allow terse labels in lists. Apply the five-item cap to action lists, not reference tables or rule lists. Put the command first, then connect related explanation. Keep qualifiers that bound a claim. Remove empty hedges.
+
+# Self-check
+
+Before sending Layer 1 text, check the sentence and paragraph limits. Replace semicolons and contractions. Change known-actor passive voice to active voice. Replace nominalizations, stacked auxiliaries, -ing main verbs, and phrasal verbs.
+
+For Layer 2 text, check that the first line gives the next action and that the last line gives one concrete next action or ends the text. Skip this check when an exception applies.
+
+This style fixes the form of unclear writing. It cannot make an unsupported claim true.
+
