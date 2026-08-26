@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [0.3.3] - 2026-08-26
+
+### Changed
+- Updated the bundled `ste` style with the v2.0 action-first reply shape, explicit scope, strict and STE-flavored modes, and exception rules.
+
 ## [0.3.2] - 2026-08-20
 
 ### Added
