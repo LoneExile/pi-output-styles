@@ -1,5 +1,6 @@
 # Local design/spec docs — intentionally kept OUT of version control
 docs/superpowers/
+CONTEXT.md
 
 # Node
 node_modules/

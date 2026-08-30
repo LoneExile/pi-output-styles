@@ -55,7 +55,7 @@ The style is applied every turn. The status line shows `style: eli5`. `/style of
 
 `omp-default` / `omp-friendly` / `omp-pragmatic` are Oh My Pi's own built-in [`personality`](https://github.com/can1357/oh-my-pi/tree/main/packages/coding-agent/src/prompts/system/personalities) presets (`default` is the voice active when no style is selected). Useful to pin one explicitly, or as a base for Pi users (who have no native personality picker).
 
-`ste` writes in [ASD-STE100](https://asd-ste100.org) Simplified Technical English. It also uses the v2.0 action-first reply shape for person-addressed replies, tasks, issues, pull request descriptions, and commit messages. The style adapts [Ege Chelebi's ste-writing skill](https://github.com/woosal1337/blog/blob/main/videos/ep01-the-cure-for-ai-slop/ste-writing/SKILL.md).
+`ste` writes in [ASD-STE100](https://asd-ste100.org) Simplified Technical English. It also uses the v2.0 action-first reply shape for person-addressed replies, tasks, issues, pull request descriptions, and commit messages. The style adapts [Ege Chelebi's ste-writing skill](https://github.com/woosal1337/blog/blob/9240b25eac013467554fd8217f319743aa0282b8/videos/ep01-the-cure-for-ai-slop/asd-ste100/SKILL.md).
 
 `eli5` is [Lydia Hallie's ELI5 style](https://x.com/lydiahallie/status/2080378470111256907).
 
