@@ -6,8 +6,8 @@
 - Added a `showStatus` state setting to hide the active style indicator while keeping output styling enabled.
 
 ### Fixed
-- A state file that is not valid JSON is no longer handled in silence: a warning naming the file is shown once per session, and `--save` / `--project` / `off` refuse to overwrite it instead of replacing it with a fresh one. Previously an unparseable file silently disabled the saved style, and the next save discarded whatever it contained.
-- Write paths are type-checked against the settings this extension understands, so an invalid value (`{ active: 42 }`) is a compile error again rather than something written to disk. Reading still round-trips unrecognised keys verbatim.
+- A state file that cannot be read as a JSON object is no longer handled in silence: a warning naming the file is shown once per session, and `--save` / `--project` / `off` refuse to overwrite it instead of replacing it with a fresh one. Previously such a file silently disabled the saved style, and the next save discarded whatever it contained. A UTF-8 byte-order mark is now tolerated rather than treated as corruption.
+- The extension's own write path (`updateState`) is type-checked against the settings it understands, so an invalid value such as `{ active: 42 }` is a compile error rather than something written to disk. `readState`/`writeState` stay permissive on purpose so unrecognised keys round-trip.
 - Added coverage for the `resolveActiveName` fallthrough that ignores a non-string `active`; it had none.
 
 ## [0.3.3] - 2026-08-26

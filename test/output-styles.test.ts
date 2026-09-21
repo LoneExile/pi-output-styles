@@ -149,14 +149,22 @@ describe("state", () => {
     writeFileSync(valid, JSON.stringify({ active: "teacher", futureSetting: 42 }));
     expect(readStateResult(valid)).toEqual({ state: { active: "teacher", futureSetting: 42 }, malformed: false });
 
+    // Windows editors prepend a BOM; JSON.parse rejects it, but the file is fine.
+    const bom = join(dir, "bom.json");
+    writeFileSync(bom, "\uFEFF" + JSON.stringify({ active: "teacher" }));
+    expect(readStateResult(bom)).toEqual({ state: { active: "teacher" }, malformed: false });
+
     // A trailing comma is the likeliest hand-edit mistake: valid JS, invalid JSON.
     const trailingComma = join(dir, "comma.json");
     writeFileSync(trailingComma, '{ "active": "teacher", }');
     expect(readStateResult(trailingComma)).toEqual({ state: {}, malformed: true });
 
-    const array = join(dir, "array.json");
-    writeFileSync(array, "[]");
-    expect(readStateResult(array)).toEqual({ state: {}, malformed: true });
+    // Valid JSON that is not an object is still not a state file.
+    for (const [name, content] of [["array", "[]"], ["null", "null"], ["number", "42"]]) {
+      const wrongShape = join(dir, `${name}.json`);
+      writeFileSync(wrongShape, content!);
+      expect(readStateResult(wrongShape)).toEqual({ state: {}, malformed: true });
+    }
   });
 });
 

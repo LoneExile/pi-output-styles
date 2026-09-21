@@ -151,6 +151,9 @@ export function readStateResult(file: string): StateRead {
   } catch {
     return { state: {}, malformed: false }; // no file yet → nothing to report
   }
+  // Some editors prepend a byte-order mark, which JSON.parse rejects. The file
+  // is still what the user thinks it is; don't tell them to "fix the JSON".
+  text = text.replace(/^\uFEFF/, "");
   if (text.trim() === "") return { state: {}, malformed: false }; // touched but empty
   try {
     const parsed: unknown = JSON.parse(text);
@@ -175,11 +178,11 @@ export function writeState(file: string, state: StyleState): void {
 }
 
 // Merges `patch` into the file's existing contents. Refuses to write over a
-// file it could not parse, because doing so would silently discard whatever
-// the user had typed there. Callers already report the throw to the user.
+// file it could not read as a state object, because doing so would silently
+// discard whatever the user had put there. Callers already report the throw.
 function updateState(file: string, patch: Partial<StyleSettings>): void {
   const { state, malformed } = readStateResult(file);
-  if (malformed) throw new Error(`${file} is not valid JSON; refusing to overwrite it`);
+  if (malformed) throw new Error(`${file} could not be read as a JSON object; refusing to overwrite it`);
   writeState(file, { ...state, ...patch });
 }
 
@@ -393,8 +396,8 @@ function warnMalformedState(ctx: ExtensionContext, reads: [string, StateRead][])
   const bad = reads.filter(([, read]) => read.malformed).map(([file]) => file);
   if (bad.length === 0) return;
   ctx.ui.notify(
-    `Ignoring ${bad.length === 1 ? "an invalid state file" : "invalid state files"}: ${bad.join(", ")}. ` +
-      "Fix the JSON to restore the saved style and showStatus setting.",
+    `Ignoring ${bad.length === 1 ? "a state file that is not a JSON object" : "state files that are not JSON objects"}: ${bad.join(", ")}. ` +
+      "Fix the file to restore the saved style and showStatus setting.",
     "warning",
   );
 }
