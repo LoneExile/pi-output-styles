@@ -49,8 +49,6 @@ Then a new session.
 
 The style is applied every turn. The status line shows `style: eli5` by default. `/style off` restores OMP’s default personality on the next turn.
 
-![Status indicator shown with showStatus true and hidden with showStatus false](https://github.com/LoneExile/pi-output-styles/raw/main/assets/show-status-comparison.svg)
-
 ## Bundled styles
 
 `omp-default` · `omp-friendly` · `omp-pragmatic` · `concise` · `explanatory` · `teacher` · `reviewer` · `diagrams-first` · `ste` · `eli5`.
@@ -91,7 +89,7 @@ The indicator is visible by default. To hide it without disabling the active out
 1. Choose the scope:
    - all projects: edit `~/.omp/agent/pi-output-styles.json`
    - current project: edit `<repo>/.omp/pi-output-styles.json`
-2. Add `"showStatus": false` to the JSON object. Create the file if it does not exist.
+2. Add `"showStatus": false` to the JSON object. Create the file if it does not exist. `showStatus` must be a JSON boolean (`false`, not `"false"`); other values are ignored.
 3. Send the next prompt or run `/style <name>` to refresh the footer. A restart is not required.
 
 A status-only user setting is valid:
@@ -111,7 +109,7 @@ It can also live alongside a saved style:
 }
 ```
 
-Set `showStatus` to `true`, or remove it, to restore the indicator. The user value takes precedence over the project value, so check the user state file if a project setting appears to have no effect. Changing styles with `--save` or `--project` preserves the existing `showStatus` value.
+Set `showStatus` to `true` to restore the indicator. Removing it falls back to the project value, then to the visible default. The user value takes precedence over the project value, so check the user state file if a project setting appears to have no effect. Changing styles with `--save` or `--project` preserves all existing state keys.
 
 ## Develop
 

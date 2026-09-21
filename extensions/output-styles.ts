@@ -123,19 +123,15 @@ export function bundledStylesDir(): string {
 }
 
 export interface StyleState {
-  active?: string;
-  showStatus?: boolean;
+  [key: string]: unknown;
+  active?: unknown;
+  showStatus?: unknown;
 }
 
 export function readState(file: string): StyleState {
   try {
     const parsed: unknown = JSON.parse(readFileSync(file, "utf8"));
-    if (parsed && typeof parsed === "object") {
-      const state: StyleState = {};
-      if ("active" in parsed && typeof parsed.active === "string") state.active = parsed.active;
-      if ("showStatus" in parsed && typeof parsed.showStatus === "boolean") state.showStatus = parsed.showStatus;
-      return state;
-    }
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed as StyleState;
   } catch {
     // missing or malformed → empty
   }
@@ -145,6 +141,10 @@ export function readState(file: string): StyleState {
 export function writeState(file: string, state: StyleState): void {
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, JSON.stringify(state, null, 2) + "\n");
+}
+
+function updateState(file: string, patch: Partial<StyleState>): void {
+  writeState(file, { ...readState(file), ...patch });
 }
 
 export function userStateFile(): string {
@@ -160,11 +160,15 @@ export function resolveActiveName(
   userState: StyleState,
   projectState: StyleState,
 ): string | null {
-  return sessionActive ?? userState.active ?? projectState.active ?? null;
+  const userActive = typeof userState.active === "string" ? userState.active : null;
+  const projectActive = typeof projectState.active === "string" ? projectState.active : null;
+  return sessionActive ?? userActive ?? projectActive;
 }
 
 export function resolveShowStatus(userState: StyleState, projectState: StyleState): boolean {
-  return userState.showStatus ?? projectState.showStatus ?? true;
+  if (typeof userState.showStatus === "boolean") return userState.showStatus;
+  if (typeof projectState.showStatus === "boolean") return projectState.showStatus;
+  return true;
 }
 
 const MARKER_PREFIX = "<!-- pi-output-styles:";
@@ -326,28 +330,34 @@ export function styleCompletions(argumentPrefix: string, cwd: string): Autocompl
   return items.length > 0 ? items : null;
 }
 
-export function resolveActiveStyle(cwd: string, styles?: Map<string, Style>): Style | null {
+export function resolveActiveStyle(
+  cwd: string,
+  styles?: Map<string, Style>,
+  userState = readState(userStateFile()),
+  projectState = readState(projectStateFile(cwd)),
+): Style | null {
   if (session.type === "off") return null;
   const sessionActive = session.type === "style" ? session.name : null;
-  const name = resolveActiveName(
-    sessionActive,
-    readState(userStateFile()),
-    readState(projectStateFile(cwd)),
-  );
+  const name = resolveActiveName(sessionActive, userState, projectState);
   if (!name) return null;
   const map = styles ?? discoverStyles(styleDirs(cwd));
   return map.get(name) ?? null;
 }
 
-function refreshStatus(ctx: ExtensionContext, style: Style | null): void {
+function refreshStatus(ctx: ExtensionContext, style: Style | null, showStatus: boolean): void {
   if (!ctx.hasUI || typeof ctx.ui.setStatus !== "function") return;
-  const showStatus = resolveShowStatus(readState(userStateFile()), readState(projectStateFile(ctx.cwd)));
   ctx.ui.setStatus(STATUS_KEY, showStatus && style ? `style: ${style.name}` : undefined);
 }
 
 export default function outputStyles(pi: ExtensionAPI): void {
   pi.on("session_start", (_event, ctx) => {
-    refreshStatus(ctx, resolveActiveStyle(ctx.cwd));
+    const userState = readState(userStateFile());
+    const projectState = readState(projectStateFile(ctx.cwd));
+    refreshStatus(
+      ctx,
+      resolveActiveStyle(ctx.cwd, undefined, userState, projectState),
+      resolveShowStatus(userState, projectState),
+    );
     if (started || !ctx.hasUI) return;
     started = true;
     startHintPoller(ctx);
@@ -359,9 +369,12 @@ export default function outputStyles(pi: ExtensionAPI): void {
 
   pi.on("before_agent_start", (event, ctx) => {
     try {
-      const style = resolveActiveStyle(ctx.cwd);
+      const userState = readState(userStateFile());
+      const projectState = readState(projectStateFile(ctx.cwd));
+      const showStatus = resolveShowStatus(userState, projectState);
+      const style = resolveActiveStyle(ctx.cwd, undefined, userState, projectState);
       if (!style) {
-        refreshStatus(ctx, null);
+        refreshStatus(ctx, null, showStatus);
         return;
       }
       // Apply first; only reflect the style in the status line once the
@@ -374,7 +387,7 @@ export default function outputStyles(pi: ExtensionAPI): void {
           ? (applyStyleReplace([incoming], style)[0] ?? styleMarker(style))
           : applyStyleReplace(incoming, style);
       const result = { systemPrompt };
-      refreshStatus(ctx, style);
+      refreshStatus(ctx, style, showStatus);
       return result;
     } catch {
       return; // never fail a turn over a styling concern
@@ -387,6 +400,9 @@ export default function outputStyles(pi: ExtensionAPI): void {
     handler: (args, ctx) => {
       const { name, persist } = parseStyleCommandArgs(args);
       const styles = discoverStyles(styleDirs(ctx.cwd));
+      const userState = readState(userStateFile());
+      const projectState = readState(projectStateFile(ctx.cwd));
+      const showStatus = resolveShowStatus(userState, projectState);
       const available = [...styles.keys()].sort().join(", ") || "(none)";
 
       const unknownFlags = args
@@ -398,7 +414,7 @@ export default function outputStyles(pi: ExtensionAPI): void {
       }
 
       if (!name) {
-        const current = resolveActiveStyle(ctx.cwd, styles);
+        const current = resolveActiveStyle(ctx.cwd, styles, userState, projectState);
         const listing = [...styles.values()]
           .sort((a, b) => a.name.localeCompare(b.name))
           .map(s => (s.description ? `${s.name} — ${s.description}` : s.name))
@@ -411,20 +427,16 @@ export default function outputStyles(pi: ExtensionAPI): void {
         let offScope = "this session";
         try {
           if (persist === "user") {
-            const state = readState(userStateFile());
-            delete state.active;
-            writeState(userStateFile(), state);
+            updateState(userStateFile(), { active: undefined });
             offScope = "cleared · user default";
           } else if (persist === "project") {
-            const state = readState(projectStateFile(ctx.cwd));
-            delete state.active;
-            writeState(projectStateFile(ctx.cwd), state);
+            updateState(projectStateFile(ctx.cwd), { active: undefined });
             offScope = "cleared · project default";
           }
         } catch (err) {
           ctx.ui.notify(`Cleared for this session, but updating the saved default failed: ${String(err)}`, "warning");
         }
-        refreshStatus(ctx, null);
+        refreshStatus(ctx, null, showStatus);
         ctx.ui.notify(`Output style off (${offScope}).`, "info");
         return;
       }
@@ -437,16 +449,16 @@ export default function outputStyles(pi: ExtensionAPI): void {
       let scope = "this session";
       try {
         if (persist === "user") {
-          writeState(userStateFile(), { ...readState(userStateFile()), active: name });
+          updateState(userStateFile(), { active: name });
           scope = "saved · user default";
         } else if (persist === "project") {
-          writeState(projectStateFile(ctx.cwd), { ...readState(projectStateFile(ctx.cwd)), active: name });
+          updateState(projectStateFile(ctx.cwd), { active: name });
           scope = "saved · project default";
         }
       } catch (err) {
         ctx.ui.notify(`Applied for this session, but saving failed: ${String(err)}`, "warning");
       }
-      refreshStatus(ctx, styles.get(name) ?? null);
+      refreshStatus(ctx, styles.get(name) ?? null, showStatus);
       ctx.ui.notify(`Output style → "${name}" (${scope}).`, "info");
     },
   });
