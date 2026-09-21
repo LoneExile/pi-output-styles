@@ -2,8 +2,10 @@
 
 ## [Unreleased]
 
+## [0.3.4] - 2026-09-21
+
 ### Added
-- Added a `showStatus` state setting to hide the active style indicator while keeping output styling enabled.
+- Added a `showStatus` state setting to hide the active style indicator while keeping output styling enabled. Contributed by @pstanton237 (#5).
 
 ### Fixed
 - A state file that cannot be read as a JSON object is no longer handled in silence: a warning naming the file is shown once per session, and `--save` / `--project` / `off` refuse to overwrite it instead of replacing it with a fresh one. Previously such a file silently disabled the saved style, and the next save discarded whatever it contained. A UTF-8 byte-order mark is now tolerated rather than treated as corruption.
