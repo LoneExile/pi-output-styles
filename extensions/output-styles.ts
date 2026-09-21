@@ -122,29 +122,68 @@ export function bundledStylesDir(): string {
   return join(dirname(fileURLToPath(import.meta.url)), "styles");
 }
 
-export interface StyleState {
-  [key: string]: unknown;
-  active?: unknown;
-  showStatus?: unknown;
+// Raw contents of a state file. Round-tripped verbatim so that keys this
+// version does not know about — a newer setting, or a user's own note —
+// survive a `--save`. Values are `unknown`: validate at the use site.
+export type StyleState = Record<string, unknown>;
+
+// The settings this extension actually understands. Used for the write side,
+// so a bad value is a compile error rather than something a user discovers
+// when their config silently stops working.
+export interface StyleSettings {
+  active?: string;
+  showStatus?: boolean;
+}
+
+// A missing file and an unparseable one are different problems: the first is
+// normal, the second means the user edited the file and we are now ignoring
+// everything in it. Callers need to tell them apart to avoid (a) staying
+// silent about a config that has no effect and (b) overwriting it blind.
+export interface StateRead {
+  state: StyleState;
+  malformed: boolean;
+}
+
+export function readStateResult(file: string): StateRead {
+  let text: string;
+  try {
+    text = readFileSync(file, "utf8");
+  } catch {
+    return { state: {}, malformed: false }; // no file yet → nothing to report
+  }
+  // Some editors prepend a byte-order mark, which JSON.parse rejects. The file
+  // is still what the user thinks it is; don't tell them to "fix the JSON".
+  text = text.replace(/^\uFEFF/, "");
+  if (text.trim() === "") return { state: {}, malformed: false }; // touched but empty
+  try {
+    const parsed: unknown = JSON.parse(text);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return { state: parsed as StyleState, malformed: false };
+    }
+  } catch {
+    return { state: {}, malformed: true }; // not JSON at all
+  }
+  return { state: {}, malformed: true }; // JSON, but not an object (array/number/string/null)
 }
 
 export function readState(file: string): StyleState {
-  try {
-    const parsed: unknown = JSON.parse(readFileSync(file, "utf8"));
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed as StyleState;
-  } catch {
-    // missing or malformed → empty
-  }
-  return {};
+  return readStateResult(file).state;
 }
 
+// Deliberately permissive: it must be able to write back whatever `readState`
+// round-tripped, including keys this version does not model.
 export function writeState(file: string, state: StyleState): void {
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, JSON.stringify(state, null, 2) + "\n");
 }
 
-function updateState(file: string, patch: Partial<StyleState>): void {
-  writeState(file, { ...readState(file), ...patch });
+// Merges `patch` into the file's existing contents. Refuses to write over a
+// file it could not read as a state object, because doing so would silently
+// discard whatever the user had put there. Callers already report the throw.
+function updateState(file: string, patch: Partial<StyleSettings>): void {
+  const { state, malformed } = readStateResult(file);
+  if (malformed) throw new Error(`${file} could not be read as a JSON object; refusing to overwrite it`);
+  writeState(file, { ...state, ...patch });
 }
 
 export function userStateFile(): string {
@@ -349,14 +388,32 @@ function refreshStatus(ctx: ExtensionContext, style: Style | null, showStatus: b
   ctx.ui.setStatus(STATUS_KEY, showStatus && style ? `style: ${style.name}` : undefined);
 }
 
+// An unparseable state file is ignored in full: the saved style stops applying
+// and `showStatus` stops being honoured, which is indistinguishable from
+// "nothing was ever saved". Say so once per session rather than never.
+function warnMalformedState(ctx: ExtensionContext, reads: [string, StateRead][]): void {
+  if (!ctx.hasUI || typeof ctx.ui.notify !== "function") return;
+  const bad = reads.filter(([, read]) => read.malformed).map(([file]) => file);
+  if (bad.length === 0) return;
+  ctx.ui.notify(
+    `Ignoring ${bad.length === 1 ? "a state file that is not a JSON object" : "state files that are not JSON objects"}: ${bad.join(", ")}. ` +
+      "Fix the file to restore the saved style and showStatus setting.",
+    "warning",
+  );
+}
+
 export default function outputStyles(pi: ExtensionAPI): void {
   pi.on("session_start", (_event, ctx) => {
-    const userState = readState(userStateFile());
-    const projectState = readState(projectStateFile(ctx.cwd));
+    const user = readStateResult(userStateFile());
+    const project = readStateResult(projectStateFile(ctx.cwd));
+    warnMalformedState(ctx, [
+      [userStateFile(), user],
+      [projectStateFile(ctx.cwd), project],
+    ]);
     refreshStatus(
       ctx,
-      resolveActiveStyle(ctx.cwd, undefined, userState, projectState),
-      resolveShowStatus(userState, projectState),
+      resolveActiveStyle(ctx.cwd, undefined, user.state, project.state),
+      resolveShowStatus(user.state, project.state),
     );
     if (started || !ctx.hasUI) return;
     started = true;

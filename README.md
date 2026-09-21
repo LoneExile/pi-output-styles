@@ -109,7 +109,16 @@ It can also live alongside a saved style:
 }
 ```
 
-Set `showStatus` to `true` to restore the indicator. Removing it falls back to the project value, then to the visible default. The user value takes precedence over the project value, so check the user state file if a project setting appears to have no effect. Changing styles with `--save` or `--project` preserves all existing state keys.
+Set `showStatus` to `true` to restore the indicator. Removing it falls back to the project value, then to the visible default. The user value takes precedence over the project value, so check the user state file if a project setting appears to have no effect. Changing styles with `--save` or `--project` preserves every other key in the file, including ones this version does not recognise.
+
+### If a state file cannot be read
+
+A state file that is not a JSON object — invalid JSON, or valid JSON such as `[]` or `null` — is ignored in full: the saved style stops applying and `showStatus` stops being honoured. Because that looks exactly like having saved nothing, the extension tells you instead of failing quietly:
+
+- a warning naming the offending file is shown once per session at startup;
+- `--save`, `--project` and `off` refuse to write to it rather than replacing your file with a fresh one, and report that the save failed. The session-scoped part of the command still takes effect (`/style teacher --save` still switches this session to `teacher`; `/style off --save` still turns styling off for this session) — only the persisted default is left as it was.
+
+Fix the file — a trailing comma is the usual culprit — and the saved settings take effect again on the next prompt. A UTF-8 byte-order mark is tolerated.
 
 ## Develop
 

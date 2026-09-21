@@ -3,6 +3,7 @@ import outputStyles, {
   parseStyle,
   discoverStyles,
   readState,
+  readStateResult,
   writeState,
   resolveActiveName,
   resolveShowStatus,
@@ -72,9 +73,9 @@ describe("parseStyle", () => {
   });
 });
 
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 function tmpStylesDir(files: Record<string, string>): string {
   const dir = mkdtempSync(join(tmpdir(), "pos-styles-"));
@@ -135,6 +136,36 @@ describe("state", () => {
     writeFileSync(array, "[]");
     expect(readState(array)).toEqual({});
   });
+
+  test("readStateResult separates a missing file from one it could not parse", () => {
+    const dir = mkdtempSync(join(tmpdir(), "pos-state-"));
+    expect(readStateResult(join(dir, "absent.json"))).toEqual({ state: {}, malformed: false });
+
+    const empty = join(dir, "empty.json");
+    writeFileSync(empty, "   \n");
+    expect(readStateResult(empty)).toEqual({ state: {}, malformed: false });
+
+    const valid = join(dir, "valid.json");
+    writeFileSync(valid, JSON.stringify({ active: "teacher", futureSetting: 42 }));
+    expect(readStateResult(valid)).toEqual({ state: { active: "teacher", futureSetting: 42 }, malformed: false });
+
+    // Windows editors prepend a BOM; JSON.parse rejects it, but the file is fine.
+    const bom = join(dir, "bom.json");
+    writeFileSync(bom, "\uFEFF" + JSON.stringify({ active: "teacher" }));
+    expect(readStateResult(bom)).toEqual({ state: { active: "teacher" }, malformed: false });
+
+    // A trailing comma is the likeliest hand-edit mistake: valid JS, invalid JSON.
+    const trailingComma = join(dir, "comma.json");
+    writeFileSync(trailingComma, '{ "active": "teacher", }');
+    expect(readStateResult(trailingComma)).toEqual({ state: {}, malformed: true });
+
+    // Valid JSON that is not an object is still not a state file.
+    for (const [name, content] of [["array", "[]"], ["null", "null"], ["number", "42"]]) {
+      const wrongShape = join(dir, `${name}.json`);
+      writeFileSync(wrongShape, content!);
+      expect(readStateResult(wrongShape)).toEqual({ state: {}, malformed: true });
+    }
+  });
 });
 
 describe("resolveActiveName", () => {
@@ -143,6 +174,12 @@ describe("resolveActiveName", () => {
     expect(resolveActiveName(null, { active: "u" }, { active: "p" })).toBe("u");
     expect(resolveActiveName(null, {}, { active: "p" })).toBe("p");
     expect(resolveActiveName(null, {}, {})).toBe(null);
+  });
+
+  test("ignores a non-string active and falls through to the next scope", () => {
+    expect(resolveActiveName(null, { active: 42 }, { active: "p" })).toBe("p");
+    expect(resolveActiveName(null, { active: ["teacher"] }, { active: "p" })).toBe("p");
+    expect(resolveActiveName(null, { active: 42 }, {})).toBe(null);
   });
 });
 
@@ -558,6 +595,43 @@ describe("extension wiring", () => {
     expect(cap.statuses).toEqual([undefined]);
   });
 
+  test("session_start warns about an unparseable state file, naming it", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "pos-wire-"));
+    process.env.PI_OUTPUT_STYLES_HOME = mkdtempSync(join(tmpdir(), "pos-home-"));
+    mkdirSync(dirname(userStateFile()), { recursive: true });
+    writeFileSync(userStateFile(), '{ "active": "teacher", }');
+    const { cap, ctx } = harness(cwd);
+    await cap.handlers["session_start"](undefined, ctx);
+    const warnings = cap.notes.filter(n => n.type === "warning");
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]!.message).toContain(userStateFile());
+  });
+
+  test("session_start warns about an unparseable project state file", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "pos-wire-"));
+    process.env.PI_OUTPUT_STYLES_HOME = mkdtempSync(join(tmpdir(), "pos-home-"));
+    mkdirSync(dirname(projectStateFile(cwd)), { recursive: true });
+    writeFileSync(projectStateFile(cwd), "not json at all");
+    const { cap, ctx } = harness(cwd);
+    await cap.handlers["session_start"](undefined, ctx);
+    const warnings = cap.notes.filter(n => n.type === "warning");
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]!.message).toContain(projectStateFile(cwd));
+  });
+
+  test("session_start stays quiet when state files are valid or absent", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "pos-wire-"));
+    process.env.PI_OUTPUT_STYLES_HOME = mkdtempSync(join(tmpdir(), "pos-home-"));
+    const { cap, ctx } = harness(cwd);
+    await cap.handlers["session_start"](undefined, ctx);
+    expect(cap.notes.filter(n => n.type === "warning")).toEqual([]);
+
+    writeState(userStateFile(), { active: "teacher", showStatus: false });
+    const second = harness(cwd);
+    await second.cap.handlers["session_start"](undefined, second.ctx);
+    expect(second.cap.notes.filter(n => n.type === "warning")).toEqual([]);
+  });
+
   test("hasUI:false suppresses status", async () => {
     const cwd = mkdtempSync(join(tmpdir(), "pos-wire-"));
     process.env.PI_OUTPUT_STYLES_HOME = mkdtempSync(join(tmpdir(), "pos-home-"));
@@ -681,6 +755,32 @@ describe("extension wiring", () => {
     writeState(projectStateFile(cwd), { active: "teacher", showStatus: false, futureSetting: 42 });
     await cap.commands["style"]("off --project", ctx);
     expect(readState(projectStateFile(cwd))).toEqual({ showStatus: false, futureSetting: 42 });
+  });
+
+  test("/style teacher --save refuses to overwrite an unparseable file and says so", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "pos-wire-"));
+    process.env.PI_OUTPUT_STYLES_HOME = mkdtempSync(join(tmpdir(), "pos-home-"));
+    const original = '{\n  "active": "teacher",\n  "showStatus": false,\n  "futureSetting": 42,\n}\n';
+    mkdirSync(dirname(userStateFile()), { recursive: true });
+    writeFileSync(userStateFile(), original);
+    const { cap, ctx } = harness(cwd);
+    await cap.commands["style"]("eli5 --save", ctx);
+    expect(readFileSync(userStateFile(), "utf8")).toBe(original);
+    expect(cap.notes.some(n => n.type === "warning" && n.message.includes("saving failed"))).toBe(true);
+    // The style still applies for this session — only the persist step failed.
+    expect(cap.statuses).toContain("style: eli5");
+  });
+
+  test("/style off --save refuses to overwrite an unparseable file and says so", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "pos-wire-"));
+    process.env.PI_OUTPUT_STYLES_HOME = mkdtempSync(join(tmpdir(), "pos-home-"));
+    const original = '{ "active": "teacher", "showStatus": false, }';
+    mkdirSync(dirname(userStateFile()), { recursive: true });
+    writeFileSync(userStateFile(), original);
+    const { cap, ctx } = harness(cwd);
+    await cap.commands["style"]("off --save", ctx);
+    expect(readFileSync(userStateFile(), "utf8")).toBe(original);
+    expect(cap.notes.some(n => n.type === "warning" && n.message.includes("updating the saved default failed"))).toBe(true);
   });
 });
 
