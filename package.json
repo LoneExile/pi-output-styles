@@ -29,5 +29,5 @@
     "@types/node": "^22.10.0",
     "typescript": "^5.6.0"
   },
-  "files": ["extensions", "README.md", "CHANGELOG.md", "LICENSE"]
+  "files": ["extensions", "assets/show-status-comparison.svg", "README.md", "CHANGELOG.md", "LICENSE"]
 }

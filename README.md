@@ -47,7 +47,9 @@ Then a new session.
 - `/style off` — clear the active style for this session (overrides any saved default). `none` is an alias; `off --save` / `off --project` also clears the saved default.
 - While composing `/style`, a hint line below the input shows the available flags (`--save` / `--project`).
 
-The style is applied every turn. The status line shows `style: eli5` by default. Set `"showStatus": false` in the user or project state file to hide the indicator. `/style off` restores OMP’s default personality on the next turn.
+The style is applied every turn. The status line shows `style: eli5` by default. `/style off` restores OMP’s default personality on the next turn.
+
+![Status indicator shown with showStatus true and hidden with showStatus false](./assets/show-status-comparison.svg)
 
 ## Bundled styles
 
@@ -79,9 +81,28 @@ The body becomes the personality slot. Precedence — **definitions**: project >
 ## Config
 
 - `PI_OUTPUT_STYLES_HOME` — override the user config base (default `~/.omp/agent`).
-- User default (written by `--save`): `~/.omp/agent/pi-output-styles.json` (base overridable via `PI_OUTPUT_STYLES_HOME`).
-- Project default (written by `--project`, git-tracked): `<repo>/.omp/pi-output-styles.json`.
-- `showStatus` controls the footer indicator and defaults to `true`. The user value takes precedence over the project value.
+- User state (written by `--save`): `~/.omp/agent/pi-output-styles.json` (base overridable via `PI_OUTPUT_STYLES_HOME`).
+- Project state (written by `--project`, git-tracked): `<repo>/.omp/pi-output-styles.json`.
+
+### Hide the status indicator
+
+The indicator is visible by default. To hide it without disabling the active output style:
+
+1. Choose the scope:
+   - all projects: edit `~/.omp/agent/pi-output-styles.json`
+   - current project: edit `<repo>/.omp/pi-output-styles.json`
+2. Add `"showStatus": false` to the JSON object. Create the file if it does not exist.
+3. Send the next prompt or run `/style <name>` to refresh the footer. A restart is not required.
+
+A status-only user setting is valid:
+
+```json
+{
+  "showStatus": false
+}
+```
+
+It can also live alongside a saved style:
 
 ```json
 {
@@ -90,7 +111,7 @@ The body becomes the personality slot. Precedence — **definitions**: project >
 }
 ```
 
-Changing styles with `--save` or `--project` preserves the existing `showStatus` value.
+Set `showStatus` to `true`, or remove it, to restore the indicator. The user value takes precedence over the project value, so check the user state file if a project setting appears to have no effect. Changing styles with `--save` or `--project` preserves the existing `showStatus` value.
 
 ## Develop
 
