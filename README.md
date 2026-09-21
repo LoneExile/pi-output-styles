@@ -49,7 +49,7 @@ Then a new session.
 
 The style is applied every turn. The status line shows `style: eli5` by default. `/style off` restores OMP’s default personality on the next turn.
 
-![Status indicator shown with showStatus true and hidden with showStatus false](./assets/show-status-comparison.svg)
+![Status indicator shown with showStatus true and hidden with showStatus false](https://github.com/LoneExile/pi-output-styles/raw/main/assets/show-status-comparison.svg)
 
 ## Bundled styles
 

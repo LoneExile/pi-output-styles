@@ -36,7 +36,6 @@ jobs:
           grep -qx 'package/extensions/output-styles.ts' /tmp/files.txt
           grep -qx 'package/extensions/styles/teacher.md' /tmp/files.txt
           grep -qx 'package/extensions/styles/concise.md' /tmp/files.txt
-          grep -qx 'package/assets/show-status-comparison.svg' /tmp/files.txt
           grep -qx 'package/package.json' /tmp/files.txt
           grep -qx 'package/README.md' /tmp/files.txt
           grep -qx 'package/CHANGELOG.md' /tmp/files.txt
