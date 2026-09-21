@@ -124,13 +124,17 @@ export function bundledStylesDir(): string {
 
 export interface StyleState {
   active?: string;
+  showStatus?: boolean;
 }
 
 export function readState(file: string): StyleState {
   try {
     const parsed: unknown = JSON.parse(readFileSync(file, "utf8"));
-    if (parsed && typeof parsed === "object" && "active" in parsed && typeof parsed.active === "string") {
-      return { active: parsed.active };
+    if (parsed && typeof parsed === "object") {
+      const state: StyleState = {};
+      if ("active" in parsed && typeof parsed.active === "string") state.active = parsed.active;
+      if ("showStatus" in parsed && typeof parsed.showStatus === "boolean") state.showStatus = parsed.showStatus;
+      return state;
     }
   } catch {
     // missing or malformed → empty
@@ -157,6 +161,10 @@ export function resolveActiveName(
   projectState: StyleState,
 ): string | null {
   return sessionActive ?? userState.active ?? projectState.active ?? null;
+}
+
+export function resolveShowStatus(userState: StyleState, projectState: StyleState): boolean {
+  return userState.showStatus ?? projectState.showStatus ?? true;
 }
 
 const MARKER_PREFIX = "<!-- pi-output-styles:";
@@ -333,7 +341,8 @@ export function resolveActiveStyle(cwd: string, styles?: Map<string, Style>): St
 
 function refreshStatus(ctx: ExtensionContext, style: Style | null): void {
   if (!ctx.hasUI || typeof ctx.ui.setStatus !== "function") return;
-  ctx.ui.setStatus(STATUS_KEY, style ? `style: ${style.name}` : undefined);
+  const showStatus = resolveShowStatus(readState(userStateFile()), readState(projectStateFile(ctx.cwd)));
+  ctx.ui.setStatus(STATUS_KEY, showStatus && style ? `style: ${style.name}` : undefined);
 }
 
 export default function outputStyles(pi: ExtensionAPI): void {
@@ -402,10 +411,14 @@ export default function outputStyles(pi: ExtensionAPI): void {
         let offScope = "this session";
         try {
           if (persist === "user") {
-            writeState(userStateFile(), {});
+            const state = readState(userStateFile());
+            delete state.active;
+            writeState(userStateFile(), state);
             offScope = "cleared · user default";
           } else if (persist === "project") {
-            writeState(projectStateFile(ctx.cwd), {});
+            const state = readState(projectStateFile(ctx.cwd));
+            delete state.active;
+            writeState(projectStateFile(ctx.cwd), state);
             offScope = "cleared · project default";
           }
         } catch (err) {
@@ -424,10 +437,10 @@ export default function outputStyles(pi: ExtensionAPI): void {
       let scope = "this session";
       try {
         if (persist === "user") {
-          writeState(userStateFile(), { active: name });
+          writeState(userStateFile(), { ...readState(userStateFile()), active: name });
           scope = "saved · user default";
         } else if (persist === "project") {
-          writeState(projectStateFile(ctx.cwd), { active: name });
+          writeState(projectStateFile(ctx.cwd), { ...readState(projectStateFile(ctx.cwd)), active: name });
           scope = "saved · project default";
         }
       } catch (err) {

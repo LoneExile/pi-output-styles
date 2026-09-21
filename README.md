@@ -47,7 +47,7 @@ Then a new session.
 - `/style off` — clear the active style for this session (overrides any saved default). `none` is an alias; `off --save` / `off --project` also clears the saved default.
 - While composing `/style`, a hint line below the input shows the available flags (`--save` / `--project`).
 
-The style is applied every turn. The status line shows `style: eli5`. `/style off` restores OMP’s default personality on the next turn.
+The style is applied every turn. The status line shows `style: eli5` by default. Set `"showStatus": false` in the user or project state file to hide the indicator. `/style off` restores OMP’s default personality on the next turn.
 
 ## Bundled styles
 
@@ -81,6 +81,16 @@ The body becomes the personality slot. Precedence — **definitions**: project >
 - `PI_OUTPUT_STYLES_HOME` — override the user config base (default `~/.omp/agent`).
 - User default (written by `--save`): `~/.omp/agent/pi-output-styles.json` (base overridable via `PI_OUTPUT_STYLES_HOME`).
 - Project default (written by `--project`, git-tracked): `<repo>/.omp/pi-output-styles.json`.
+- `showStatus` controls the footer indicator and defaults to `true`. The user value takes precedence over the project value.
+
+```json
+{
+  "active": "explanatory",
+  "showStatus": false
+}
+```
+
+Changing styles with `--save` or `--project` preserves the existing `showStatus` value.
 
 ## Develop
 

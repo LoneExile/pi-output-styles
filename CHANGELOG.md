@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- Added a `showStatus` state setting to hide the active style indicator while keeping output styling enabled.
+
 ## [0.3.3] - 2026-08-26
 
 ### Changed
