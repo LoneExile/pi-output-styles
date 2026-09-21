@@ -5,6 +5,7 @@ import outputStyles, {
   readState,
   writeState,
   resolveActiveName,
+  resolveShowStatus,
   applyStyle,
   applyStyleReplace,
   replacePersonalitySection,
@@ -117,22 +118,22 @@ describe("discoverStyles", () => {
 });
 
 describe("state", () => {
-  test("writeState then readState round-trips active", () => {
+  test("writeState then readState round-trips supported and unknown settings", () => {
     const dir = mkdtempSync(join(tmpdir(), "pos-state-"));
     const file = join(dir, "nested", "state.json");
-    writeState(file, { active: "teacher" });
-    expect(readState(file)).toEqual({ active: "teacher" });
+    writeState(file, { active: "teacher", showStatus: false, futureSetting: 42 });
+    expect(readState(file)).toEqual({ active: "teacher", showStatus: false, futureSetting: 42 });
   });
 
-  test("readState returns {} for missing or malformed files", () => {
+  test("readState returns {} for missing, malformed, or non-object files", () => {
     expect(readState("/no/such/file.json")).toEqual({});
     const dir = mkdtempSync(join(tmpdir(), "pos-state-"));
     const bad = join(dir, "bad.json");
     writeFileSync(bad, "{ not json");
     expect(readState(bad)).toEqual({});
-    const noActive = join(dir, "noactive.json");
-    writeFileSync(noActive, JSON.stringify({ other: 1 }));
-    expect(readState(noActive)).toEqual({});
+    const array = join(dir, "array.json");
+    writeFileSync(array, "[]");
+    expect(readState(array)).toEqual({});
   });
 });
 
@@ -142,6 +143,16 @@ describe("resolveActiveName", () => {
     expect(resolveActiveName(null, { active: "u" }, { active: "p" })).toBe("u");
     expect(resolveActiveName(null, {}, { active: "p" })).toBe("p");
     expect(resolveActiveName(null, {}, {})).toBe(null);
+  });
+});
+
+describe("resolveShowStatus", () => {
+  test("defaults to visible and gives a valid user setting precedence", () => {
+    expect(resolveShowStatus({}, {})).toBe(true);
+    expect(resolveShowStatus({}, { showStatus: false })).toBe(false);
+    expect(resolveShowStatus({ showStatus: true }, { showStatus: false })).toBe(true);
+    expect(resolveShowStatus({ showStatus: "false" }, { showStatus: false })).toBe(false);
+    expect(resolveShowStatus({ showStatus: "false" }, {})).toBe(true);
   });
 });
 
@@ -498,33 +509,53 @@ describe("extension wiring", () => {
   });
 
 
-  test("/style teacher --project persists to the project state file", async () => {
+  test("/style teacher --project preserves project settings", async () => {
     const cwd = mkdtempSync(join(tmpdir(), "pos-wire-"));
     process.env.PI_OUTPUT_STYLES_HOME = mkdtempSync(join(tmpdir(), "pos-home-"));
+    writeState(projectStateFile(cwd), { showStatus: false, futureSetting: 42 });
     const { cap, ctx } = harness(cwd);
     await cap.commands["style"]("teacher --project", ctx);
-    expect(readState(projectStateFile(cwd))).toEqual({ active: "teacher" });
+    expect(readState(projectStateFile(cwd))).toEqual({ active: "teacher", showStatus: false, futureSetting: 42 });
     expect(readState(userStateFile())).toEqual({});
   });
 
-  test("/style teacher --save persists to the user state file only", async () => {
+  test("/style teacher --save preserves user settings", async () => {
     const cwd = mkdtempSync(join(tmpdir(), "pos-wire-"));
     process.env.PI_OUTPUT_STYLES_HOME = mkdtempSync(join(tmpdir(), "pos-home-"));
+    writeState(userStateFile(), { showStatus: "false", futureSetting: 42 });
     const { cap, ctx } = harness(cwd);
     await cap.commands["style"]("teacher --save", ctx);
-    expect(readState(userStateFile())).toEqual({ active: "teacher" });
+    expect(readState(userStateFile())).toEqual({ active: "teacher", showStatus: "false", futureSetting: 42 });
     expect(readState(projectStateFile(cwd))).toEqual({});
   });
 
   // sessionActive is "teacher" here (set by the session-scope test above),
   // and each harness() call below builds a fresh `cap`, so these tests
   // observe only their own captured statuses/notes.
-  test("session_start sets the status line", async () => {
+  test("session_start sets the status line by default", async () => {
     const cwd = mkdtempSync(join(tmpdir(), "pos-wire-"));
     process.env.PI_OUTPUT_STYLES_HOME = mkdtempSync(join(tmpdir(), "pos-home-"));
     const { cap, ctx } = harness(cwd);
     await cap.handlers["session_start"](undefined, ctx);
     expect(cap.statuses).toContain("style: teacher");
+  });
+
+  test("user showStatus:false clears the status line in isolation", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "pos-wire-"));
+    process.env.PI_OUTPUT_STYLES_HOME = mkdtempSync(join(tmpdir(), "pos-home-"));
+    writeState(userStateFile(), { active: "teacher", showStatus: false });
+    const { cap, ctx } = harness(cwd);
+    await cap.handlers["session_start"](undefined, ctx);
+    expect(cap.statuses).toEqual([undefined]);
+  });
+
+  test("project showStatus:false clears the status line", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "pos-wire-"));
+    process.env.PI_OUTPUT_STYLES_HOME = mkdtempSync(join(tmpdir(), "pos-home-"));
+    writeState(projectStateFile(cwd), { active: "teacher", showStatus: false });
+    const { cap, ctx } = harness(cwd);
+    await cap.handlers["session_start"](undefined, ctx);
+    expect(cap.statuses).toEqual([undefined]);
   });
 
   test("hasUI:false suppresses status", async () => {
@@ -634,13 +665,22 @@ describe("extension wiring", () => {
     expect(resolveActiveStyle(cwd)).toBeNull();
   });
 
-  test("/style off --save clears the saved user default", async () => {
+  test("/style off --save clears active without overwriting user settings", async () => {
     const cwd = mkdtempSync(join(tmpdir(), "pos-wire-"));
     process.env.PI_OUTPUT_STYLES_HOME = mkdtempSync(join(tmpdir(), "pos-home-"));
     const { cap, ctx } = harness(cwd);
-    writeState(userStateFile(), { active: "teacher" });
+    writeState(userStateFile(), { active: "teacher", showStatus: false, futureSetting: 42 });
     await cap.commands["style"]("off --save", ctx);
-    expect(readState(userStateFile())).toEqual({});
+    expect(readState(userStateFile())).toEqual({ showStatus: false, futureSetting: 42 });
+  });
+
+  test("/style off --project clears active without overwriting project settings", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "pos-wire-"));
+    process.env.PI_OUTPUT_STYLES_HOME = mkdtempSync(join(tmpdir(), "pos-home-"));
+    const { cap, ctx } = harness(cwd);
+    writeState(projectStateFile(cwd), { active: "teacher", showStatus: false, futureSetting: 42 });
+    await cap.commands["style"]("off --project", ctx);
+    expect(readState(projectStateFile(cwd))).toEqual({ showStatus: false, futureSetting: 42 });
   });
 });
 
