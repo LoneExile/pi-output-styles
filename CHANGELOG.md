@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.3.5] - 2026-10-03
+
 ### Added
 - An unsaved `/style` choice is stored on the session branch. `session_start` and `session_switch` restore that choice. `session_branch` and `session_tree` keep a choice that the destination branch does not have yet.
 
