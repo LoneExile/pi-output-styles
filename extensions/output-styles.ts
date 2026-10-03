@@ -28,6 +28,7 @@ interface ExtensionContext {
   hasUI: boolean;
   ui: ExtensionUI;
   setInterval?(callback: () => void, ms?: number): unknown;
+  sessionManager?: { getBranch(): readonly SessionEntryLike[] };
 }
 
 interface BeforeAgentStartEvent {
@@ -51,7 +52,11 @@ type EventHandler<E, R = void> = (event: E, ctx: ExtensionContext) => R | void |
 interface ExtensionAPI {
   on(event: "session_start", handler: EventHandler<unknown>): void;
   on(event: "session_shutdown", handler: EventHandler<unknown>): void;
+  on(event: "session_switch", handler: EventHandler<unknown>): void;
+  on(event: "session_branch", handler: EventHandler<unknown>): void;
+  on(event: "session_tree", handler: EventHandler<unknown>): void;
   on(event: "before_agent_start", handler: EventHandler<BeforeAgentStartEvent, BeforeAgentStartResult>): void;
+  appendEntry?(customType: string, data?: unknown): void;
   registerCommand(
     name: string,
     def: {
@@ -332,13 +337,66 @@ export function startHintPoller(ctx: ExtensionContext): void {
   }, 600);
 }
 
-// Session-active style selection is process-global (module-level) state.
-// This assumes one module instance per session/cwd, which holds under
-// today's per-session extension loading. If OMP ever shares one module
-// instance across multiple concurrent sessions, switch this to a
-// cwd-keyed Map instead of a single variable.
-type SessionSelection = { type: "inherit" } | { type: "off" } | { type: "style"; name: string };
+// Live copy of the session choice. Hosts that expose a session branch
+// persist the same value with appendEntry, and session_start / session_switch
+// replace this copy from that branch. Without a branch, the copy stays
+// process-global for the life of the module.
+export type SessionSelection = { type: "inherit" } | { type: "off" } | { type: "style"; name: string };
+export interface SessionEntryLike {
+  type: string;
+  customType?: string;
+  data?: unknown;
+}
+export const STYLE_SELECTION_ENTRY_TYPE = "pi-output-style-selection";
 let session: SessionSelection = { type: "inherit" };
+
+function copySelection(selection: SessionSelection): SessionSelection {
+  return selection.type === "style" ? { type: "style", name: selection.name } : { type: selection.type };
+}
+
+function selectionFromDetails(data: unknown): SessionSelection | null {
+  if (!data || typeof data !== "object" || !("version" in data) || data.version !== 1) return null;
+  if (!("selection" in data) || !data.selection || typeof data.selection !== "object") return null;
+  const selection = data.selection;
+  if (!("type" in selection) || typeof selection.type !== "string") return null;
+  if (selection.type === "inherit" || selection.type === "off") return { type: selection.type };
+  if (selection.type === "style" && "name" in selection && typeof selection.name === "string") {
+    return { type: "style", name: selection.name };
+  }
+  return null;
+}
+
+function sameSelection(left: SessionSelection, right: SessionSelection): boolean {
+  if (left.type !== right.type) return false;
+  return left.type !== "style" || (right.type === "style" && left.name === right.name);
+}
+
+export function restoreSessionSelection(entries: readonly SessionEntryLike[]): SessionSelection {
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const entry = entries[i];
+    if (!entry || entry.type !== "custom" || entry.customType !== STYLE_SELECTION_ENTRY_TYPE) continue;
+    const selection = selectionFromDetails(entry.data);
+    if (selection) return selection;
+  }
+  return { type: "inherit" };
+}
+
+function readBranch(ctx: ExtensionContext): readonly SessionEntryLike[] | null {
+  const manager = ctx.sessionManager;
+  if (!manager || typeof manager.getBranch !== "function") return null;
+  try {
+    const entries = manager.getBranch();
+    return Array.isArray(entries) ? entries : null;
+  } catch {
+    return null;
+  }
+}
+
+function restoreSession(ctx: ExtensionContext): void {
+  const entries = readBranch(ctx);
+  if (!entries) return;
+  session = restoreSessionSelection(entries);
+}
 
 function styleDirs(cwd: string): string[] {
   // low → high precedence: bundled < user < project
@@ -402,8 +460,39 @@ function warnMalformedState(ctx: ExtensionContext, reads: [string, StateRead][])
   );
 }
 
+function refreshActiveStatus(ctx: ExtensionContext): void {
+  const userState = readState(userStateFile());
+  const projectState = readState(projectStateFile(ctx.cwd));
+  refreshStatus(
+    ctx,
+    resolveActiveStyle(ctx.cwd, undefined, userState, projectState),
+    resolveShowStatus(userState, projectState),
+  );
+}
+
 export default function outputStyles(pi: ExtensionAPI): void {
+  const recordSessionSelection = (): void => {
+    if (session.type === "inherit" || typeof pi.appendEntry !== "function") return;
+    try {
+      pi.appendEntry(STYLE_SELECTION_ENTRY_TYPE, { version: 1, selection: copySelection(session) });
+    } catch {
+      // The in-memory choice still applies for this process.
+    }
+  };
+
+  // Tree navigation can land on a path that does not yet hold a choice just
+  // made in memory. Write it onto that path. An inherit choice means "no
+  // session override", so take whatever the destination branch stored.
+  const preserveSessionSelectionAfterNavigation = (ctx: ExtensionContext): void => {
+    const entries = readBranch(ctx);
+    if (!entries) return;
+    if (session.type === "inherit") session = restoreSessionSelection(entries);
+    else if (!sameSelection(restoreSessionSelection(entries), session)) recordSessionSelection();
+    refreshActiveStatus(ctx);
+  };
+
   pi.on("session_start", (_event, ctx) => {
+    restoreSession(ctx);
     const user = readStateResult(userStateFile());
     const project = readStateResult(projectStateFile(ctx.cwd));
     warnMalformedState(ctx, [
@@ -422,6 +511,19 @@ export default function outputStyles(pi: ExtensionAPI): void {
       started = false;
       lastHintInput = null;
     });
+  });
+
+  pi.on("session_switch", (_event, ctx) => {
+    restoreSession(ctx);
+    refreshActiveStatus(ctx);
+  });
+
+  pi.on("session_branch", (_event, ctx) => {
+    preserveSessionSelectionAfterNavigation(ctx);
+  });
+
+  pi.on("session_tree", (_event, ctx) => {
+    preserveSessionSelectionAfterNavigation(ctx);
   });
 
   pi.on("before_agent_start", (event, ctx) => {
@@ -481,6 +583,7 @@ export default function outputStyles(pi: ExtensionAPI): void {
       }
       if (OFF_WORDS[name.toLowerCase()]) {
         session = { type: "off" };
+        recordSessionSelection();
         let offScope = "this session";
         try {
           if (persist === "user") {
@@ -503,6 +606,7 @@ export default function outputStyles(pi: ExtensionAPI): void {
       }
 
       session = { type: "style", name };
+      recordSessionSelection();
       let scope = "this session";
       try {
         if (persist === "user") {

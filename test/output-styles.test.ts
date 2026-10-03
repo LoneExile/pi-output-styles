@@ -18,6 +18,8 @@ import outputStyles, {
   styleHintFor,
   startHintPoller,
   resolveActiveStyle,
+  restoreSessionSelection,
+  STYLE_SELECTION_ENTRY_TYPE,
 } from "../extensions/output-styles.ts";
 
 describe("parseStyle", () => {
@@ -180,6 +182,37 @@ describe("resolveActiveName", () => {
     expect(resolveActiveName(null, { active: 42 }, { active: "p" })).toBe("p");
     expect(resolveActiveName(null, { active: ["teacher"] }, { active: "p" })).toBe("p");
     expect(resolveActiveName(null, { active: 42 }, {})).toBe(null);
+  });
+});
+
+describe("restoreSessionSelection", () => {
+  test("an empty branch inherits", () => {
+    expect(restoreSessionSelection([])).toEqual({ type: "inherit" });
+  });
+
+  test("the latest valid selection wins and other custom entries are ignored", () => {
+    const entries = [
+      selectionEntry({ type: "style", name: "teacher" }),
+      { type: "message" },
+      selectionEntry({ type: "off" }),
+      {
+        type: "custom",
+        customType: "other",
+        data: { version: 1, selection: { type: "style", name: "concise" } },
+      },
+      selectionEntry({ type: "style", name: "eli5" }),
+    ];
+    expect(restoreSessionSelection(entries)).toEqual({ type: "style", name: "eli5" });
+  });
+
+  test("a malformed selection is skipped and the previous valid one stays", () => {
+    const entries = [
+      selectionEntry({ type: "style", name: "teacher" }),
+      { type: "custom", customType: STYLE_SELECTION_ENTRY_TYPE, data: { version: 2, selection: { type: "off" } } },
+      { type: "custom", customType: STYLE_SELECTION_ENTRY_TYPE, data: { version: 1, selection: { type: "style" } } },
+      { type: "custom", customType: STYLE_SELECTION_ENTRY_TYPE, data: null },
+    ];
+    expect(restoreSessionSelection(entries)).toEqual({ type: "style", name: "teacher" });
   });
 });
 
@@ -438,6 +471,7 @@ interface Captured {
   widgets: { key: string; lines: string[] | null }[];
   timers: (() => void)[];
   editorText: string;
+  entries: { type: string; customType?: string; data?: unknown }[];
 }
 interface FakeCtx {
   cwd: string;
@@ -449,10 +483,32 @@ interface FakeCtx {
     notify: (m: string, t?: string) => void;
   };
   setInterval: (cb: () => void, ms?: number) => unknown;
+  sessionManager?: { getBranch: () => Captured["entries"] };
+}
+
+function selectionEntry(selection: { type: "inherit" } | { type: "off" } | { type: "style"; name: string }) {
+  return {
+    type: "custom",
+    customType: STYLE_SELECTION_ENTRY_TYPE,
+    data: { version: 1, selection },
+  };
+}
+
+function withSessionBranch(cap: Captured, ctx: FakeCtx): FakeCtx {
+  return { ...ctx, sessionManager: { getBranch: () => cap.entries } };
 }
 
 function harness(cwd: string): { cap: Captured; ctx: FakeCtx } {
-  const cap: Captured = { commands: {}, handlers: {}, statuses: [], notes: [], widgets: [], timers: [], editorText: "" };
+  const cap: Captured = {
+    commands: {},
+    handlers: {},
+    statuses: [],
+    notes: [],
+    widgets: [],
+    timers: [],
+    editorText: "",
+    entries: [],
+  };
   const ctx: FakeCtx = {
     cwd,
     hasUI: true,
@@ -474,6 +530,9 @@ function harness(cwd: string): { cap: Captured; ctx: FakeCtx } {
     },
     registerCommand: (name: string, def: { handler: (a: string, c: FakeCtx) => unknown }) => {
       cap.commands[name] = def.handler;
+    },
+    appendEntry: (customType: string, data?: unknown) => {
+      cap.entries.push({ type: "custom", customType, data });
     },
   };
   // Fake pi implements only the surface the extension uses; its handler/ctx
@@ -781,6 +840,120 @@ describe("extension wiring", () => {
     await cap.commands["style"]("off --save", ctx);
     expect(readFileSync(userStateFile(), "utf8")).toBe(original);
     expect(cap.notes.some(n => n.type === "warning" && n.message.includes("updating the saved default failed"))).toBe(true);
+  });
+
+  test("/style teacher records the session choice and /style with no name does not", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "pos-wire-"));
+    process.env.PI_OUTPUT_STYLES_HOME = mkdtempSync(join(tmpdir(), "pos-home-"));
+    const { cap, ctx } = harness(cwd);
+    await cap.commands["style"]("", ctx);
+    expect(cap.entries).toEqual([]);
+    await cap.commands["style"]("nope-not-real", ctx);
+    expect(cap.entries).toEqual([]);
+    await cap.commands["style"]("teacher", ctx);
+    expect(cap.entries).toEqual([selectionEntry({ type: "style", name: "teacher" })]);
+    expect(readState(userStateFile())).toEqual({});
+    expect(readState(projectStateFile(cwd))).toEqual({});
+  });
+
+  test("/style off records an off selection that beats a saved default", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "pos-wire-"));
+    process.env.PI_OUTPUT_STYLES_HOME = mkdtempSync(join(tmpdir(), "pos-home-"));
+    writeState(userStateFile(), { active: "teacher" });
+    const { cap, ctx } = harness(cwd);
+    await cap.commands["style"]("off", ctx);
+    expect(cap.entries).toEqual([selectionEntry({ type: "off" })]);
+    expect(resolveActiveStyle(cwd)).toBeNull();
+  });
+
+  test("session_start replaces the in-memory choice with the branch selection", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "pos-wire-"));
+    process.env.PI_OUTPUT_STYLES_HOME = mkdtempSync(join(tmpdir(), "pos-home-"));
+    const { cap, ctx } = harness(cwd);
+    await cap.commands["style"]("concise", ctx);
+    cap.entries = [selectionEntry({ type: "style", name: "teacher" })];
+    await cap.handlers["session_start"](undefined, withSessionBranch(cap, ctx));
+    const result = (await cap.handlers["before_agent_start"](
+      { prompt: "hi", systemPrompt: ["BASE"] },
+      ctx,
+    )) as { systemPrompt: string[] };
+    expect(result.systemPrompt[0]).toContain("<!-- pi-output-styles:teacher -->");
+    expect(result.systemPrompt[0]).not.toContain("<!-- pi-output-styles:concise -->");
+  });
+
+  test("session_start with an empty branch drops the session choice and uses the saved default", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "pos-wire-"));
+    process.env.PI_OUTPUT_STYLES_HOME = mkdtempSync(join(tmpdir(), "pos-home-"));
+    writeState(userStateFile(), { active: "teacher" });
+    const { cap, ctx } = harness(cwd);
+    await cap.commands["style"]("concise", ctx);
+    cap.entries = [];
+    await cap.handlers["session_start"](undefined, withSessionBranch(cap, ctx));
+    expect(resolveActiveStyle(cwd)?.name).toBe("teacher");
+  });
+
+  test("session_switch calls getBranch as a method on sessionManager", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "pos-wire-"));
+    process.env.PI_OUTPUT_STYLES_HOME = mkdtempSync(join(tmpdir(), "pos-home-"));
+    writeState(userStateFile(), { active: "teacher" });
+    const { cap, ctx } = harness(cwd);
+    await cap.commands["style"]("concise", ctx);
+    const manager = {
+      entries: [selectionEntry({ type: "off" })],
+      getBranch(this: { entries: Captured["entries"] }) {
+        return this.entries;
+      },
+    };
+    await cap.handlers["session_switch"](undefined, { ...ctx, sessionManager: manager });
+    expect(resolveActiveStyle(cwd)).toBeNull();
+    expect(cap.statuses.at(-1)).toBeUndefined();
+  });
+
+  test("session_switch restores off from the destination branch", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "pos-wire-"));
+    process.env.PI_OUTPUT_STYLES_HOME = mkdtempSync(join(tmpdir(), "pos-home-"));
+    writeState(userStateFile(), { active: "teacher" });
+    const { cap, ctx } = harness(cwd);
+    await cap.commands["style"]("concise", ctx);
+    cap.entries = [selectionEntry({ type: "off" })];
+    await cap.handlers["session_switch"](undefined, withSessionBranch(cap, ctx));
+    expect(resolveActiveStyle(cwd)).toBeNull();
+    expect(cap.statuses.at(-1)).toBeUndefined();
+  });
+
+  test("session_branch writes the current choice when the destination branch lacks it", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "pos-wire-"));
+    process.env.PI_OUTPUT_STYLES_HOME = mkdtempSync(join(tmpdir(), "pos-home-"));
+    const { cap, ctx } = harness(cwd);
+    await cap.commands["style"]("teacher", ctx);
+    cap.entries = [];
+    await cap.handlers["session_branch"](undefined, withSessionBranch(cap, ctx));
+    expect(cap.entries).toEqual([selectionEntry({ type: "style", name: "teacher" })]);
+    expect(resolveActiveStyle(cwd)?.name).toBe("teacher");
+  });
+
+  test("session_branch does not write when the destination already has the same choice", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "pos-wire-"));
+    process.env.PI_OUTPUT_STYLES_HOME = mkdtempSync(join(tmpdir(), "pos-home-"));
+    const { cap, ctx } = harness(cwd);
+    await cap.commands["style"]("teacher", ctx);
+    expect(cap.entries).toHaveLength(1);
+    await cap.handlers["session_branch"](undefined, withSessionBranch(cap, ctx));
+    expect(cap.entries).toHaveLength(1);
+  });
+
+  test("session_tree restores a branch choice when this session has no explicit choice", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "pos-wire-"));
+    process.env.PI_OUTPUT_STYLES_HOME = mkdtempSync(join(tmpdir(), "pos-home-"));
+    const { cap, ctx } = harness(cwd);
+    await cap.commands["style"]("teacher", ctx);
+    cap.entries = [];
+    await cap.handlers["session_switch"](undefined, withSessionBranch(cap, ctx));
+    expect(resolveActiveStyle(cwd)).toBeNull();
+    cap.entries = [selectionEntry({ type: "style", name: "eli5" })];
+    await cap.handlers["session_tree"](undefined, withSessionBranch(cap, ctx));
+    expect(cap.entries).toEqual([selectionEntry({ type: "style", name: "eli5" })]);
+    expect(resolveActiveStyle(cwd)?.name).toBe("eli5");
   });
 });
 

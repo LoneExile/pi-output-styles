@@ -41,7 +41,7 @@ Then a new session.
 ## Use
 
 - `/style` — show the active style and list available ones.
-- `/style <name>` — activate a style for this session.
+- `/style <name>` — activate a style for this session. The choice is stored on the session, so a session switch or a tree move brings it back.
 - `/style <name> --save` — also save it as your personal (user) default.
 - `/style <name> --project` — save it as the project default (committed with the repo).
 - `/style off` — clear the active style for this session (overrides any saved default). `none` is an alias; `off --save` / `off --project` also clears the saved default.
